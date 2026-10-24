@@ -178,6 +178,40 @@ pub const CJK_CANDIDATES: &[&str] = &[
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
 ];
 
+/// CJK glyphs fill their em box while Latin only reaches cap height, so
+/// at equal point sizes Chinese looks noticeably bigger. It also keeps
+/// mixed-script rows from breaking: egui sizes a row by the *primary*
+/// font's metrics, but Hiragino-class fonts carry `hhea.lineGap = 0.5em`
+/// (line ratio 1.50 vs the defaults' 1.15), and egui's per-glyph
+/// vertical centering shifts the fallback glyph up by half that gap —
+/// enough to clip the top of Chinese glyphs out of their rows. Scaling
+/// to 0.84 equalizes visual size and brings the effective line ratio
+/// (1.50 × 0.84 ≈ 1.26) close enough to the row height that centering
+/// no longer clips.
+pub const CJK_SCALE: f32 = 0.84;
+
+/// Font definitions with `font` registered as the Chinese fallback:
+/// appended last in both families (so Latin keeps the default fonts and
+/// their metrics) and scaled down by [`CJK_SCALE`].
+pub fn egui_fonts(font: &CjkFont) -> egui::FontDefinitions {
+    use egui::{FontData, FontDefinitions, FontFamily, FontTweak};
+    let mut fonts = FontDefinitions::default();
+    let tweak = FontTweak {
+        scale: CJK_SCALE,
+        ..Default::default()
+    };
+    fonts.font_data.insert(
+        "cjk".into(),
+        std::sync::Arc::new(
+            FontData::from_blob(std::sync::Arc::new(font.bytes.clone()), font.index).tweak(tweak),
+        ),
+    );
+    for family in [FontFamily::Proportional, FontFamily::Monospace] {
+        fonts.families.entry(family).or_default().push("cjk".into());
+    }
+    fonts
+}
+
 /// The persisted-config location: `~/.framely/config.json` (cwd fallback
 /// when HOME is unset).
 pub fn config_path() -> PathBuf {
