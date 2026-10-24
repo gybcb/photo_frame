@@ -26,8 +26,9 @@ pub struct PhotoInfo {
     pub exif: Vec<u8>,
 }
 
-/// Field order shown on the frame (lens first, exposure group after).
-const ORDER: [Field; 6] = [
+/// Field order shown on the frame (camera body first, exposure group after).
+const ORDER: [Field; 7] = [
+    Field::Camera,
     Field::Lens,
     Field::Focal,
     Field::Aperture,
@@ -79,6 +80,13 @@ impl PhotoInfo {
         let orientation = short(Tag(Context::Tiff, 0x0112)).unwrap_or(1) as u16;
 
         let mut parts: Vec<(Field, String)> = Vec::new();
+
+        // Body model as its own field: the camera that took the shot (the Lens
+        // field may show a lens name instead). Trim to keep the joined line clean.
+        let model_trim = model.trim().to_string();
+        if !model_trim.is_empty() {
+            parts.push((Field::Camera, model_trim));
+        }
 
         // Lens: prefer the explicit lens name, fall back to the body model.
         let lens_raw = ascii(Tag(Context::Exif, 0xA434));

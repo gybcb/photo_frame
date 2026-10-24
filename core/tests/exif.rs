@@ -61,3 +61,22 @@ fn garbage_input_degrades_to_unknown() {
     let info = PhotoInfo::from_bytes(b"definitely not a jpeg");
     assert_eq!(info.brand, Brand::Unknown);
 }
+
+#[test]
+fn camera_field_carries_the_body_model() {
+    let info = PhotoInfo::from_bytes(&fixture("sony.jpg"));
+    assert_eq!(
+        field_text(&info, Field::Camera).as_deref(),
+        Some("ILCE-7RM4")
+    );
+    assert_eq!(
+        info.fields.parts.first().map(|(f, _)| *f),
+        Some(Field::Camera)
+    );
+}
+
+#[test]
+fn no_model_means_no_camera_field() {
+    let info = PhotoInfo::from_bytes(&fixture("plain.jpg"));
+    assert!(info.fields.parts.is_empty());
+}
