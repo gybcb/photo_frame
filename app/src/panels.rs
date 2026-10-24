@@ -144,7 +144,14 @@ pub fn theme_panel(
     ui.add_space(10.0);
     ui.heading(lang.select("Layout", "布局"));
     ui.separator();
-    if cfg.margin_top < 0.0 {
+    // Sentinel semantics are all-or-nothing (see ThemeConfig::effective_margins):
+    // only a fully-unset preset gets expanded from border_ratio. A partially
+    // hand-edited preset keeps its set edges and zeroes the rest, like the engine.
+    if cfg.margin_top < 0.0
+        && cfg.margin_bottom < 0.0
+        && cfg.margin_left < 0.0
+        && cfg.margin_right < 0.0
+    {
         let b = cfg.border_ratio;
         cfg.margin_top = b;
         cfg.margin_bottom = b;
@@ -165,8 +172,10 @@ pub fn theme_panel(
         };
         slider(ui, lang.select(en, zh), f, 0.005..=0.25);
     }
-    cfg.border_ratio =
-        (cfg.margin_top + cfg.margin_bottom + cfg.margin_left + cfg.margin_right) / 4.0;
+    // Fold from the sentinel-safe values: a partially-set preset must never
+    // fold a raw -1.0 into the mean (that would flip border_ratio negative).
+    let m = cfg.effective_margins();
+    cfg.border_ratio = (m[0] + m[1] + m[2] + m[3]) / 4.0;
     if spec.bar_edge != BarEdge::Left {
         ui.horizontal(|ui| {
             ui.label(lang.select("Bar position", "参数条位置"));
