@@ -1,9 +1,11 @@
 name: CI
 
 on:
+  # Builds run only for releases (and manually); ordinary pushes don't
+  # trigger CI. Tag a `v*` version to start the three-platform build.
   push:
-    branches: [main]
-  pull_request:
+    tags: ["v*"]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
