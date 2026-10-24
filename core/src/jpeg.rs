@@ -11,7 +11,14 @@
 use std::io::Cursor;
 
 use exif::{In, Reader, Tag};
-use image::{ImageFormat, ImageReader};
+use image::{ImageFormat, ImageReader, Limits};
+
+/// Max decoder allocations (bytes), lifted from the image crate's 512MiB
+/// default so multi-hundred-megapixel stitched panoramas (e.g. two Phase
+/// One frames combined = ~300MP RGBA = 1.2GB) decode instead of failing
+/// with "Memory limit exceeded". A real OOM is prevented downstream by
+/// the app rendering previews at reduced size, not by this decoder cap.
+pub const DECODE_ALLOC_LIMIT: u64 = 4 << 30; // 4 GiB — up to ~1000MP RGBA
 
 use crate::assets::LogoMode;
 use crate::error::FrameError;
@@ -49,7 +56,14 @@ pub fn decode(bytes: &[u8]) -> Result<Decoded, FrameError> {
     ) {
         return Err(FrameError::UnsupportedFormat);
     }
-    let img = ImageReader::with_format(Cursor::new(bytes), fmt)
+    let mut reader = ImageReader::with_format(Cursor::new(bytes), fmt);
+    // The default 512MiB decoder-allocation cap rejects stitched panoramas
+    // (see DECODE_ALLOC_LIMIT); raise it — the app keeps preview memory in
+    // check by rendering at reduced size, not by this cap.
+    let mut limits = Limits::default();
+    limits.max_alloc = Some(DECODE_ALLOC_LIMIT);
+    reader.limits(limits);
+    let img = reader
         .decode()
         .map_err(|e| FrameError::Decode(e.to_string()))?;
     let orientation = exif_orientation(bytes);
@@ -129,17 +143,25 @@ pub fn frame_and_export(
     quality: u8,
 ) -> Result<Vec<u8>, FrameError> {
     let canvas = render::compose(photo, layout, logo_mode)?;
+    encode_canvas(canvas, original_exif, quality)
+}
+
+/// Encode an already-composed canvas, carrying `original_exif` over.
+/// Split out so callers can drop the (huge) photo before encoding:
+/// for a ~300MP panorama that frees ~1.1GB at the memory peak.
+pub fn encode_canvas(
+    canvas: image::RgbaImage,
+    original_exif: Option<&[u8]>,
+    quality: u8,
+) -> Result<Vec<u8>, FrameError> {
     let mut buf = Vec::new();
     let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, quality);
-    // JPEG has no alpha; the canvas is opaque anyway (bg + opaque photo).
-    let rgb = image::DynamicImage::ImageRgba8(canvas).into_rgb8();
+    // encode_image streams the Rgba8 canvas block-by-block and drops alpha
+    // itself (the canvas is opaque anyway: bg + opaque photo), so no
+    // full-canvas RGB copy is allocated — that copy alone is ~1.3GB for a
+    // stitched panorama export.
     encoder
-        .encode(
-            &rgb,
-            rgb.width(),
-            rgb.height(),
-            image::ExtendedColorType::Rgb8,
-        )
+        .encode_image(&canvas)
         .map_err(|e| FrameError::Encode(e.to_string()))?;
     Ok(splice_app1(buf, original_exif))
 }

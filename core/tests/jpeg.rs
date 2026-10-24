@@ -287,3 +287,21 @@ fn sony_frame() -> FrameLayout {
 fn plain_frame() -> FrameLayout {
     minimal_layout(Brand::Unknown, 120, 80, vec![])
 }
+
+/// The image crate's built-in default is 512MiB of decoder allocations,
+/// which a stitched panorama (~300MP RGBA = 1.2GB) blows past. Core must
+/// raise it, or such files fail with "Memory limit exceeded".
+#[test]
+fn the_decode_limit_clears_a_large_stitched_panorama() {
+    // 20197 x 14186 RGBA, the real Phase One stitch that regressed.
+    let panorama = 20197_u64 * 14186 * 4;
+    assert!(
+        crate_decode_alloc_limit() >= panorama,
+        "limit {} too small for a {panorama}-byte decode",
+        crate_decode_alloc_limit()
+    );
+}
+
+fn crate_decode_alloc_limit() -> u64 {
+    framely_core::jpeg::DECODE_ALLOC_LIMIT
+}

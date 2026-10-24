@@ -6,6 +6,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 
 use eframe::egui::{self, Color32, RichText, TextureHandle, TextureOptions, vec2};
@@ -19,13 +20,20 @@ use crate::batch::{self, BatchSpec, Done};
 use crate::i18n::{Action, Config, Lang, Msg, config_path, load_config};
 use crate::panels::{FieldOverrides, fields_panel, theme_panel};
 
+/// Longest side kept for the resident preview photo, and the largest
+/// preview texture ever built. A stitched ~300MP panorama decodes to
+/// ~1.1GB of RGBA; keeping only this size down to ~16MB makes such files
+/// ordinary to work with — exports re-read the file at full resolution.
+const PREVIEW_MAX_SIDE: u32 = 2048;
+
 /// The currently loaded photo and everything derived from it.
 #[derive(Default)]
 pub struct Loaded {
     path: Option<PathBuf>,
     info: Option<PhotoInfo>,
-    /// Orientation-corrected full-resolution photo.
-    photo: Option<image::RgbaImage>,
+    /// Orientation-corrected photo, downscaled to preview size on load.
+    /// Shared via `Arc` so each render doesn't copy it to the worker.
+    photo: Option<Arc<image::RgbaImage>>,
 }
 
 /// One-shot result of a background render.
@@ -200,10 +208,17 @@ impl FramelyApp {
                 let info = PhotoInfo::from_bytes(&bytes);
                 match jpeg::load_bytes(&bytes) {
                     Ok((photo, _)) => {
+                        // Keep only preview-size pixels resident; export
+                        // re-reads the file at full resolution. Decoding
+                        // still happens at full size (framing needs the
+                        // orientation-corrected pixels), but the big
+                        // buffer is freed right here instead of held for
+                        // the whole session.
+                        let photo = downscale(photo, PREVIEW_MAX_SIDE);
                         self.loaded = Loaded {
                             path: Some(path.to_path_buf()),
                             info: Some(info),
-                            photo: Some(photo),
+                            photo: Some(Arc::new(photo)),
                         };
                         self.overrides = FieldOverrides::default();
                         self.render(ctx);
@@ -249,6 +264,10 @@ impl FramelyApp {
         let ctx = ctx.clone();
         std::thread::spawn(move || {
             let result = (|| -> Result<(TextureHandle, (u32, u32)), String> {
+                // The resident photo is already preview-sized, so the
+                // frame is composed (and its text/logo rasterized) at
+                // preview scale: sharp, and a few tens of MB regardless
+                // of how huge the source file is.
                 let l = layout(
                     spec.0,
                     photo.width(),
@@ -258,12 +277,9 @@ impl FramelyApp {
                     &spec.1,
                     &spec.4,
                 );
+                let (w, h) = (l.canvas_width, l.canvas_height);
                 let canvas =
                     framely_core::render::compose(&photo, &l, spec.5).map_err(|e| e.to_string())?;
-                let (w, h) = (canvas.width(), canvas.height());
-                // Downscale so the preview never uploads a giant texture.
-                let max_side = 2048_u32;
-                let canvas = downscale(canvas, max_side);
                 let img = egui::ColorImage::from_rgba_unmultiplied(
                     [canvas.width() as usize, canvas.height() as usize],
                     canvas.as_raw(),
@@ -374,12 +390,17 @@ impl FramelyApp {
         }
     }
 
-    /// Render at full resolution and encode, reusing the preview spec.
+    /// Export at the file's true full resolution: re-read and re-decode
+    /// (the resident preview photo is downscaled), compose, then drop
+    /// the decoded photo *before* encoding so the export peak is
+    /// canvas + encoded bytes rather than photo + canvas + bytes.
     fn frame_current_bytes(&self) -> Result<Vec<u8>, framely_core::error::FrameError> {
         let info = self.loaded.info.as_ref().unwrap();
-        let photo = self.loaded.photo.as_ref().unwrap();
+        let path = self.loaded.path.as_ref().unwrap();
         let fields = self.overrides.apply(&info.fields);
         let fields = apply_enable(fields, &self.enabled);
+        let bytes = fs::read(path).map_err(framely_core::error::FrameError::Io)?;
+        let (photo, exif) = jpeg::load_bytes(&bytes)?;
         let l = layout(
             self.template,
             photo.width(),
@@ -389,17 +410,9 @@ impl FramelyApp {
             &self.theme(),
             &fields,
         );
-        jpeg::frame_and_export(
-            photo,
-            &l,
-            self.logo_mode,
-            if info.exif.is_empty() {
-                None
-            } else {
-                Some(&info.exif)
-            },
-            self.quality,
-        )
+        let canvas = framely_core::render::compose(&photo, &l, self.logo_mode)?;
+        drop(photo);
+        jpeg::encode_canvas(canvas, Some(&exif), self.quality)
     }
 
     // ---- batch ---------------------------------------------------------

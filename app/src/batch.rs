@@ -59,10 +59,13 @@ pub fn export_one(src: &Path, out_dir: &Path, spec: &BatchSpec) -> Result<PathBu
         &spec.theme,
         &fields,
     );
-    let out_bytes = jpeg::frame_and_export(
-        &photo,
-        &l,
-        spec.logo_mode,
+    let canvas = framely_core::render::compose(&photo, &l, spec.logo_mode)?;
+    // Free the (possibly huge) decoded photo before encoding: for a
+    // ~300MP panorama this drops the per-file peak by ~1.1GB, which
+    // matters because several files export at the same time.
+    drop(photo);
+    let out_bytes = jpeg::encode_canvas(
+        canvas,
         if info.exif.is_empty() {
             None
         } else {
@@ -93,19 +96,29 @@ pub fn unique_path(dir: &Path, stem: &str, ext: &str) -> PathBuf {
 /// Run the batch across threads, reporting each completion.
 /// Returns `(ok_count, error_count)` when finished.
 pub fn run(files: Vec<PathBuf>, out_dir: PathBuf, spec: BatchSpec, tx: mpsc::Sender<Done>) {
-    files.par_iter().for_each(|path| {
-        let done = match export_one(path, &out_dir, &spec) {
-            Ok(target) => Done {
-                path: target,
-                ok: true,
-                error: None,
-            },
-            Err(e) => Done {
-                path: path.clone(),
-                ok: false,
-                error: Some(e.to_string()),
-            },
-        };
-        let _ = tx.send(done);
+    // Two workers, not one-per-core: a stitched panorama export peaks at
+    // ~2.5GB of live buffers, and that cost is per in-flight file. Two
+    // keeps batches of huge files inside any sane machine's RAM while
+    // still overlapping IO and encode work.
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(2)
+        .build()
+        .expect("rayon pool with 2 threads");
+    pool.install(|| {
+        files.par_iter().for_each(|path| {
+            let done = match export_one(path, &out_dir, &spec) {
+                Ok(target) => Done {
+                    path: target,
+                    ok: true,
+                    error: None,
+                },
+                Err(e) => Done {
+                    path: path.clone(),
+                    ok: false,
+                    error: Some(e.to_string()),
+                },
+            };
+            let _ = tx.send(done);
+        });
     });
 }
