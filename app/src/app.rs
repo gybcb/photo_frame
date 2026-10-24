@@ -16,6 +16,7 @@ use framely_core::layout::layout;
 use framely_core::template::{Field, TemplateId, ThemeConfig};
 
 use crate::batch::{self, BatchSpec, Done};
+use crate::i18n::{Action, Config, Lang, Msg, config_path, load_config};
 use crate::panels::{FieldOverrides, fields_panel, theme_panel};
 
 /// The currently loaded photo and everything derived from it.
@@ -43,9 +44,9 @@ pub struct FramelyApp {
     preview: Option<TextureHandle>,
     preview_size: (u32, u32),
     /// Render error shown in the viewport.
-    render_error: Option<String>,
-    /// Status line (save result, export counts…).
-    status: String,
+    render_error: Option<Msg>,
+    /// Status line (save result, export counts…), localized on display.
+    status: Option<Msg>,
     /// A render is in flight; don't start another.
     rendering: bool,
     rx: Option<Receiver<Rendered>>,
@@ -62,6 +63,11 @@ pub struct FramelyApp {
 
     /// Last render signature (see `config_sig`).
     render_sig: u64,
+
+    /// UI language (persisted choice, or system locale on first run).
+    lang: Lang,
+    /// A CJK system font exists, so the language toggle can render Chinese.
+    cjk_ok: bool,
 }
 
 impl Default for FramelyApp {
@@ -89,7 +95,7 @@ impl Default for FramelyApp {
             preview: None,
             preview_size: (0, 0),
             render_error: None,
-            status: String::new(),
+            status: None,
             rendering: false,
             rx: None,
             preset_dir: std::env::var_os("HOME")
@@ -102,7 +108,26 @@ impl Default for FramelyApp {
             batch_rx: None,
             batch_running: false,
             render_sig: 0,
+            lang: {
+                let cfg = load_config(&config_path());
+                cfg.lang
+                    .unwrap_or_else(|| Lang::detect(std::env::var("LANG").ok().as_deref()))
+            },
+            cjk_ok: false,
         }
+    }
+}
+
+impl FramelyApp {
+    /// Record that a CJK font was installed (see `crate::i18n`), which
+    /// is what unlocks the language toggle.
+    pub fn with_cjk_font(mut self, installed: bool) -> Self {
+        // Without a CJK font, Chinese couldn't render: don't offer it.
+        if !installed && self.lang == Lang::Zh {
+            self.lang = Lang::En;
+        }
+        self.cjk_ok = installed;
+        self
     }
 }
 
@@ -165,7 +190,7 @@ impl FramelyApp {
         self.load_file(&first, ctx);
         if !paths.is_empty() {
             self.batch_files.extend(paths);
-            self.status = format!("{} more queued for batch", self.batch_files.len());
+            self.status = Some(Msg::BatchQueued(self.batch_files.len()));
         }
     }
 
@@ -185,12 +210,12 @@ impl FramelyApp {
                         ctx.request_repaint();
                     }
                     Err(e) => {
-                        self.render_error = Some(e.to_string());
+                        self.render_error = Some(Msg::Failed(Action::Decode, e.to_string()));
                         self.loaded = Loaded::default();
                     }
                 }
             }
-            Err(e) => self.render_error = Some(format!("read failed: {e}")),
+            Err(e) => self.render_error = Some(Msg::Failed(Action::Read, e.to_string())),
         }
     }
 
@@ -259,7 +284,7 @@ impl FramelyApp {
                     self.preview = Some(tex);
                     self.preview_size = size;
                 }
-                Err(e) => self.render_error = Some(e),
+                Err(e) => self.render_error = Some(Msg::Failed(Action::Render, e)),
             }
             self.rx = None;
             self.rendering = false;
@@ -286,11 +311,11 @@ impl FramelyApp {
         match serde_json::to_string_pretty(&payload) {
             Ok(json) => {
                 self.status = match fs::write(&dir, json) {
-                    Ok(()) => format!("preset saved to {}", dir.display()),
-                    Err(e) => format!("write failed: {e}"),
+                    Ok(()) => Some(Msg::PresetSaved(dir.display().to_string())),
+                    Err(e) => Some(Msg::Failed(Action::Write, e.to_string())),
                 };
             }
-            Err(e) => self.status = format!("serialize failed: {e}"),
+            Err(e) => self.status = Some(Msg::Failed(Action::Serialize, e.to_string())),
         }
     }
 
@@ -310,10 +335,10 @@ impl FramelyApp {
                 self.template = p.template;
                 self.set_theme(p.theme);
                 self.enabled = p.enabled;
-                self.status = format!("preset loaded from {}", path.display());
+                self.status = Some(Msg::PresetLoaded(path.display().to_string()));
                 self.render(ctx);
             }
-            Err(e) => self.status = format!("preset load failed: {e}"),
+            Err(e) => self.status = Some(Msg::Failed(Action::PresetLoad, e.to_string())),
         }
     }
 
@@ -338,15 +363,14 @@ impl FramelyApp {
         match self.frame_current_bytes() {
             Ok(bytes) => match fs::write(&out, &bytes) {
                 Ok(()) => {
-                    self.status = format!(
-                        "saved {} (EXIF carried: {})",
-                        out.display(),
-                        !info.exif.is_empty()
-                    );
+                    self.status = Some(Msg::Exported(
+                        out.display().to_string(),
+                        !info.exif.is_empty(),
+                    ));
                 }
-                Err(e) => self.status = format!("write failed: {e}"),
+                Err(e) => self.status = Some(Msg::Failed(Action::Write, e.to_string())),
             },
-            Err(e) => self.status = format!("export failed: {e}"),
+            Err(e) => self.status = Some(Msg::Failed(Action::Export, e.to_string())),
         }
     }
 
@@ -382,7 +406,7 @@ impl FramelyApp {
 
     fn start_batch(&mut self) {
         if self.batch_files.is_empty() {
-            self.status = "batch list is empty — open or drop more files".into();
+            self.status = Some(Msg::EmptyBatch);
             return;
         }
         let Some(dir) = rfd::FileDialog::new().pick_folder() else {
@@ -424,12 +448,11 @@ impl FramelyApp {
             if self.batch_done >= self.batch_total {
                 self.batch_running = false;
                 self.batch_rx = None;
-                self.status = format!(
-                    "batch done: {}/{} ok, {} failed",
-                    self.batch_done - self.batch_errors.len(),
-                    self.batch_total,
-                    self.batch_errors.len()
-                );
+                self.status = Some(Msg::BatchDone {
+                    ok: self.batch_done - self.batch_errors.len(),
+                    total: self.batch_total,
+                    failed: self.batch_errors.len(),
+                });
             }
         }
         if alive {
@@ -514,16 +537,29 @@ impl eframe::App for FramelyApp {
         let mut export_clicked = false;
         let mut save_preset_clicked = false;
         let mut load_preset_clicked = false;
+        let mut lang_clicked = false;
+        let lang = self.lang;
+        let cjk_ok = self.cjk_ok;
         egui::Panel::top("menubar").show(ui, |ui| {
             ui.horizontal(|ui| {
-                open_clicked |= ui.button("Open…").clicked();
+                open_clicked |= ui.button(lang.select("Open…", "打开…")).clicked();
                 export_clicked |= ui
-                    .button("Export")
-                    .on_hover_text("save the framed current photo")
+                    .button(lang.select("Export", "导出"))
+                    .on_hover_text(lang.select("save the framed current photo", "保存当前加框照片"))
                     .clicked();
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    load_preset_clicked |= ui.button("Load preset").clicked();
-                    save_preset_clicked |= ui.button("Save preset").clicked();
+                    load_preset_clicked |=
+                        ui.button(lang.select("Load preset", "载入预设")).clicked();
+                    save_preset_clicked |=
+                        ui.button(lang.select("Save preset", "保存预设")).clicked();
+                    if cjk_ok
+                        && ui
+                            .button(lang.switch_label())
+                            .on_hover_text(lang.select("switch language", "切换语言"))
+                            .clicked()
+                    {
+                        lang_clicked = true;
+                    }
                 });
             });
         });
@@ -539,14 +575,22 @@ impl eframe::App for FramelyApp {
         let FramelyApp { quality, .. } = self;
         egui::Panel::bottom("status").show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new(status).weak());
+                if let Some(m) = &status {
+                    ui.label(RichText::new(lang.text(m)).weak());
+                }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.add_enabled_ui(photo_loaded, |ui| {
                         batch_clicked |= ui
-                            .button("Batch export…")
-                            .on_hover_text(format!("{queued} files queued"))
+                            .button(lang.select("Batch export…", "批量导出…"))
+                            .on_hover_text(lang.say(
+                                format!("{queued} files queued"),
+                                format!("已排队 {queued} 张"),
+                            ))
                             .clicked();
-                        ui.add(egui::Slider::new(quality, 60..=100).text("JPEG quality"));
+                        ui.add(
+                            egui::Slider::new(quality, 60..=100)
+                                .text(lang.select("JPEG quality", "JPEG 质量")),
+                        );
                     });
                 });
             });
@@ -570,11 +614,13 @@ impl eframe::App for FramelyApp {
         } = self;
         egui::Panel::left("theme").exact_size(230.0).show(ui, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
-                theme_panel(ui, template, themes, logo_mode, enabled);
+                theme_panel(ui, lang, template, themes, logo_mode, enabled);
                 ui.add_space(10.0);
-                reset_clicked |= ui.button("Reset theme defaults").clicked();
+                reset_clicked |= ui
+                    .button(lang.select("Reset theme defaults", "恢复主题默认"))
+                    .clicked();
                 ui.add_space(6.0);
-                open_clicked |= ui.button("Open…").clicked();
+                open_clicked |= ui.button(lang.select("Open…", "打开…")).clicked();
             });
         });
 
@@ -589,12 +635,12 @@ impl eframe::App for FramelyApp {
             .exact_size(280.0)
             .show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    fields_panel(ui, &info, overrides);
+                    fields_panel(ui, lang, &info, overrides);
                     ui.add_space(10.0);
                     ui.weak(if rendering {
-                        "rendering…".to_string()
+                        lang.select("rendering…", "渲染中…").to_string()
                     } else if let Some(e) = &render_err {
-                        e.clone()
+                        lang.text(e)
                     } else {
                         String::new()
                     });
@@ -602,13 +648,18 @@ impl eframe::App for FramelyApp {
                         ui.add_space(10.0);
                         ui.centered_and_justified(|ui| {
                             ui.label(
-                                RichText::new("drop a photo here\n(or use Open…)")
-                                    .weak()
-                                    .heading(),
+                                RichText::new(lang.select(
+                                    "drop a photo here\n(or use Open…)",
+                                    "把照片拖到这里\n（或点“打开…”）",
+                                ))
+                                .weak()
+                                .heading(),
                             )
                         });
                     }
-                    export_clicked2 |= ui.button("Export current").clicked();
+                    export_clicked2 |= ui
+                        .button(lang.select("Export current", "导出当前"))
+                        .clicked();
                 });
             });
 
@@ -641,16 +692,31 @@ impl eframe::App for FramelyApp {
                     Color32::from_gray(140),
                 );
             } else if let Some(e) = err {
-                ui.centered_and_justified(|ui| ui.colored_label(Color32::LIGHT_RED, e));
+                let msg = lang.text(&e);
+                ui.centered_and_justified(|ui| ui.colored_label(Color32::LIGHT_RED, msg));
             } else {
                 ui.centered_and_justified(|ui| {
                     ui.label(RichText::new("Framely").heading());
-                    ui.label("drop a JPEG / TIFF / PNG, or use Open…");
+                    ui.label(lang.select(
+                        "drop a JPEG / TIFF / PNG, or use Open…",
+                        "把 JPEG / TIFF / PNG 拖进来，或点“打开”…",
+                    ));
                 });
             }
         });
 
         // --- deferred actions (panels only set flags; self is free now) ------
+        if lang_clicked {
+            self.lang = match self.lang {
+                Lang::En => Lang::Zh,
+                Lang::Zh => Lang::En,
+            };
+            let cfg = Config {
+                lang: Some(self.lang),
+            };
+            let _ = crate::i18n::save_config(&config_path(), &cfg);
+            ctx.request_repaint();
+        }
         if reset_clicked {
             let t = self.template;
             self.set_theme(ThemeConfig::default_for(t));

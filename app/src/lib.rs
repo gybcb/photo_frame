@@ -5,6 +5,7 @@
 
 mod app;
 pub mod batch;
+pub mod i18n;
 mod panels;
 
 pub use app::FramelyApp;

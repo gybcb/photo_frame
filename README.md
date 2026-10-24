@@ -70,6 +70,14 @@ Logo 资产来源与许可（Wikimedia Commons，PD-textlogo + Trademarked 提�
 净化步骤）见 `assets/brand/LICENSES.md`。字体 Inter（OFL）已内置进二进制，
 输出不依赖系统字体。
 
+## 语言
+
+- 界面支持英文 / 中文，顶栏按钮一键切换，选择持久化在 `~/.framely/config.json`。
+- 首次运行跟随系统 `LANG` 环境变量（`zh*` 前缀进中文）。
+- 中文字体不打包进二进制：运行时探测系统 CJK 字体（PingFang / 冬青黑体 /
+  华文黑体 / Noto Sans CJK），探不到时界面保持纯英文、切换按钮不出现。
+- 边框内的文字（模板名、参数、Logo）恒为英文，与界面语言无关。
+
 ## 项目结构
 
 ```

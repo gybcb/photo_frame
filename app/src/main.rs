@@ -4,6 +4,9 @@
 //! the same pipeline export uses, so preview and output always agree.
 
 use eframe::egui;
+use egui::{FontData, FontDefinitions};
+
+use framely_app::i18n::{CJK_CANDIDATES, find_cjk_font};
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -16,6 +19,24 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "Framely",
         options,
-        Box::new(|_cc| Ok(Box::new(framely_app::FramelyApp::default()))),
+        Box::new(|cc| {
+            // Chinese renders only via a system CJK font (kept out of the
+            // binary); if none is found, the app stays English-only.
+            let font = find_cjk_font(CJK_CANDIDATES);
+            if let Some(f) = &font {
+                let mut fonts = FontDefinitions::default();
+                let bytes: Vec<u8> = f.bytes.clone();
+                fonts.font_data.insert(
+                    "cjk".into(),
+                    std::sync::Arc::new(FontData::from_blob(std::sync::Arc::new(bytes), f.index)),
+                );
+                for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+                    fonts.families.entry(family).or_default().push("cjk".into());
+                }
+                cc.egui_ctx.set_fonts(fonts);
+            }
+            let app = framely_app::FramelyApp::default().with_cjk_font(font.is_some());
+            Ok(Box::new(app))
+        }),
     )
 }
