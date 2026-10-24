@@ -346,6 +346,11 @@ pub fn template_name(lang: Lang, t: framely_core::template::TemplateId) -> &'sta
             T::BlackBar => "黑色参数条",
             T::Minimal => "极简",
             T::Magazine => "杂志",
+            // TODO(task5): finalize the localized names with the GUI set.
+            T::Polaroid => "拍立得",
+            T::TwoColumn => "双栏",
+            T::TopBar => "顶部参数条",
+            T::CaptionCard => "图注卡",
         },
     )
 }
@@ -362,6 +367,7 @@ pub fn field_label(lang: Lang, f: framely_core::template::Field) -> &'static str
             F::Shutter => "快门",
             F::Iso => "ISO",
             F::Date => "日期",
+            F::Camera => "机身",
         },
     )
 }

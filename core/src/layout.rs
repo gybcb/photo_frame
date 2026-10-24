@@ -202,6 +202,43 @@ pub fn layout(
                 });
             }
         }
+        // TODO(task3): interim arm so the new template ids compile; they
+        // render like White Studio until the spec-driven engine lands.
+        // Not reachable from the GUI or e2e before Task 3.
+        _ => {
+            if has_logo {
+                let h = logo_h.max(1);
+                ops.push(DrawOp::Logo {
+                    brand,
+                    x: if centered {
+                        group_x
+                    } else {
+                        border + inner_pad
+                    },
+                    y: logo_y(bar_y, bar, h, theme.logo_y_offset),
+                    width: logo_slot,
+                    height: h,
+                });
+            }
+            if !joined.is_empty() {
+                ops.push(DrawOp::Text {
+                    content: joined,
+                    size_px: fitted.size_px,
+                    color: theme.foreground,
+                    align: if centered { Align::Left } else { Align::Right },
+                    rect: if centered {
+                        (
+                            group_x + if has_logo { logo_slot + gap } else { 0 },
+                            bar_y,
+                            text_w,
+                            bar,
+                        )
+                    } else {
+                        (region_x, bar_y, text_region_w, bar)
+                    },
+                });
+            }
+        }
     }
 
     FrameLayout {

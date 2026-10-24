@@ -46,7 +46,9 @@ fn png_hash(w: u32, h: u32, tpl: TemplateId, brand: Brand, mode: LogoMode) -> St
     let l = layout(tpl, w, h, brand, 2.0, &theme, &fields());
     let canvas = compose(&photo, &l, mode).unwrap();
     let mut png = Vec::new();
-    canvas.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+    canvas
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
     let mut d = Sha256::new();
     d.update(&png);
     hex(&d.finalize())
@@ -64,14 +66,21 @@ fn record_golden() {
     for (key, w, h, t, b, m) in cases() {
         out.push_str(&format!("{key}\t{}\n", png_hash(w, h, t, b, m)));
     }
-    let path = format!("{}/tests/fixtures/golden.sha256", env!("CARGO_MANIFEST_DIR"));
+    let path = format!(
+        "{}/tests/fixtures/golden.sha256",
+        env!("CARGO_MANIFEST_DIR")
+    );
     std::fs::write(&path, out).unwrap();
 }
 
 #[test]
 fn golden_matches_baseline() {
-    let path = format!("{}/tests/fixtures/golden.sha256", env!("CARGO_MANIFEST_DIR"));
-    let text = std::fs::read_to_string(&path).expect("run record_golden at baseline to create golden.sha256");
+    let path = format!(
+        "{}/tests/fixtures/golden.sha256",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let text = std::fs::read_to_string(&path)
+        .expect("run record_golden at baseline to create golden.sha256");
     let want: std::collections::BTreeMap<String, String> = text
         .lines()
         .filter_map(|l| l.split_once('\t'))
