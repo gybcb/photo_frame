@@ -2,7 +2,8 @@ name: CI
 
 on:
   # Builds run only for releases (and manually); ordinary pushes don't
-  # trigger CI. Tag a `v*` version to start the three-platform build.
+  # trigger CI. Tag a `v*` version to build, package and attach
+  # binaries to the GitHub Release.
   push:
     tags: ["v*"]
   workflow_dispatch:
@@ -11,8 +12,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  test:
-    name: test (${{ matrix.os }})
+  build:
+    name: build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -49,3 +50,47 @@ jobs:
 
       - name: build (release)
         run: cargo build --release -p framely-app
+
+      - name: Package binary
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          case "${{ matrix.os }}" in
+            macos-latest)
+              ARTIFACT="framely-${VERSION}-macos-arm64.tar.gz"
+              tar -C target/release -czf "$ARTIFACT" framely-app
+              ;;
+            ubuntu-latest)
+              ARTIFACT="framely-${VERSION}-linux-x86_64.tar.gz"
+              tar -C target/release -czf "$ARTIFACT" framely-app
+              ;;
+            windows-latest)
+              ARTIFACT="framely-${VERSION}-windows-x86_64.zip"
+              powershell -Command "Compress-Archive -Path target/release/framely-app.exe -DestinationPath '$ARTIFACT'"
+              ;;
+          esac
+          echo "ARTIFACT=$ARTIFACT" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT }}
+          path: ${{ env.ARTIFACT }}
+
+  # Attach the three platform packages to the Release (created if absent).
+  # Manual dispatch only produces artifacts, never a release.
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "framely-*"
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: framely-*
+          generate_release_notes: true
