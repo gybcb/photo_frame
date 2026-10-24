@@ -353,6 +353,93 @@ fn center_group_is_off_by_default() {
     }
 }
 
+fn theme_with(logo_y_offset: f64) -> ThemeConfig {
+    ThemeConfig {
+        logo_y_offset,
+        ..ThemeConfig::default_for(TemplateId::WhiteStudio)
+    }
+}
+
+fn logo_rect(l: &FrameLayout) -> (u32, u32, u32, u32) {
+    l.ops
+        .iter()
+        .find_map(|o| match o {
+            DrawOp::Logo {
+                x,
+                y,
+                width,
+                height,
+                ..
+            } => Some((*x, *y, *width, *height)),
+            _ => None,
+        })
+        .expect("logo present")
+}
+
+#[test]
+fn logo_y_offset_shifts_the_logo_symmetrically() {
+    // WhiteStudio 1333 short side: bar = 80, logo h = 48, slack = 32.
+    let base = logo_rect(&layout(
+        TemplateId::WhiteStudio,
+        2000,
+        1333,
+        Brand::Sony,
+        2.0,
+        &theme_with(0.0),
+        &all_fields(),
+    ));
+    let up = logo_rect(&layout(
+        TemplateId::WhiteStudio,
+        2000,
+        1333,
+        Brand::Sony,
+        2.0,
+        &theme_with(-0.1),
+        &all_fields(),
+    ));
+    let down = logo_rect(&layout(
+        TemplateId::WhiteStudio,
+        2000,
+        1333,
+        Brand::Sony,
+        2.0,
+        &theme_with(0.1),
+        &all_fields(),
+    ));
+    assert_eq!(up.1, base.1 - 8, "-0.1 of bar 80 raises the logo 8px");
+    assert_eq!(down.1, base.1 + 8, "+0.1 sinks it 8px");
+    assert_eq!(up.0, down.0, "only vertical moves");
+}
+
+#[test]
+fn logo_y_offset_never_lets_the_logo_leave_the_bar() {
+    let bar_y = 53 + 1333; // border + photo height at these inputs
+    for off in [-10.0, 10.0] {
+        let l = layout(
+            TemplateId::WhiteStudio,
+            2000,
+            1333,
+            Brand::Sony,
+            2.0,
+            &theme_with(off),
+            &all_fields(),
+        );
+        let (_, y, _, h) = logo_rect(&l);
+        assert!(
+            y >= bar_y && y + h <= bar_y + l.bar_height,
+            "offset {off}: logo y {y} h {h} escaped bar [{bar_y}, {}]",
+            bar_y + l.bar_height
+        );
+    }
+}
+
+#[test]
+fn logo_y_offset_defaults_to_centered() {
+    for tpl in TemplateId::ALL {
+        assert_eq!(ThemeConfig::default_for(tpl).logo_y_offset, 0.0);
+    }
+}
+
 #[test]
 fn no_template_overflows_its_canvas() {
     for tpl in [

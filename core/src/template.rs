@@ -101,6 +101,11 @@ pub struct ThemeConfig {
     pub font_scale: f64,
     /// Logo height relative to the bar height (0 disables the logo).
     pub logo_scale: f64,
+    /// Logo vertical nudge as a fraction of the bar height (0 = centered
+    /// in the bar; negative raises, positive sinks; clamped so the logo
+    /// never leaves the bar). `serde(default)` keeps old presets valid.
+    #[serde(default)]
+    pub logo_y_offset: f64,
     /// Frame background color.
     pub background: [u8; 4],
     /// Text color.
@@ -124,6 +129,7 @@ impl std::hash::Hash for ThemeConfig {
             self.bar_ratio,
             self.font_scale,
             self.logo_scale,
+            self.logo_y_offset,
             self.part_spacing,
         ] {
             state.write(&v.to_bits().to_le_bytes());
@@ -142,6 +148,7 @@ impl ThemeConfig {
             bar_ratio: 0.06,
             font_scale: 0.45,
             logo_scale: 0.6,
+            logo_y_offset: 0.0,
             background: [255, 255, 255, 255],
             foreground: [26, 26, 26, 255],
             part_spacing: 0.8,

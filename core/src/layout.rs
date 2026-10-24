@@ -47,6 +47,15 @@ pub struct FrameLayout {
 
 pub(crate) const SEP: &str = " · ";
 
+/// Logo top position inside the bar: vertically centered, nudged by the
+/// theme's fraction of the bar height, clamped so the logo never leaves
+/// the bar at extreme offsets.
+fn logo_y(bar_y: u32, bar: u32, h: u32, offset: f64) -> u32 {
+    let slack = bar.saturating_sub(h);
+    let nudge = (bar as f64 * offset).round() as i64;
+    ((slack / 2) as i64 + nudge).clamp(0, slack as i64) as u32 + bar_y
+}
+
 /// Lays out `tpl` around a `photo_w x photo_h` image. The parameter bar sits
 /// below the photo, inside the border. `logo_ratio` is the brand logo's
 /// width/height aspect, used to size the logo box without distorting it.
@@ -122,7 +131,7 @@ pub fn layout(
                     } else {
                         border + inner_pad
                     },
-                    y: bar_y + (bar - h) / 2,
+                    y: logo_y(bar_y, bar, h, theme.logo_y_offset),
                     width: logo_slot,
                     height: h,
                 });
@@ -157,7 +166,7 @@ pub fn layout(
                     } else {
                         border + inner_pad
                     },
-                    y: bar_y + (bar - logo_h.max(1)) / 2,
+                    y: logo_y(bar_y, bar, logo_h.max(1), theme.logo_y_offset),
                     width: logo_slot,
                     height: logo_h.max(1),
                 });

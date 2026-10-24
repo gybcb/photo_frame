@@ -141,6 +141,12 @@ pub fn theme_panel(
     );
     slider(
         ui,
+        lang.select("Logo vertical", "Logo 上下位置"),
+        &mut cfg.logo_y_offset,
+        -0.5..=0.5,
+    );
+    slider(
+        ui,
         lang.select("Field spacing", "字段间距"),
         &mut cfg.part_spacing,
         0.2..=1.5,
