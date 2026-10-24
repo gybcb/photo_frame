@@ -5,7 +5,9 @@
 
 use egui::{Color32, RichText, Ui, vec2};
 use framely_core::assets::LogoMode;
-use framely_core::template::{Field, Fields, TemplateId, ThemeConfig};
+use framely_core::template::{
+    BarEdge, BarStructure, Field, Fields, Separator, TemplateId, ThemeConfig,
+};
 use std::hash::{Hash, Hasher};
 
 use crate::i18n::{Lang, field_label, template_name};
@@ -107,50 +109,127 @@ pub fn theme_panel(
 ) {
     ui.heading(lang.select("Template", "模板"));
     ui.separator();
-    for &t in TemplateId::ALL.iter() {
-        ui.radio_value(template, t, template_name(lang, t));
+    let bar_group = [
+        TemplateId::WhiteStudio,
+        TemplateId::BlackBar,
+        TemplateId::Minimal,
+        TemplateId::Magazine,
+        TemplateId::TwoColumn,
+        TemplateId::Polaroid,
+    ];
+    let special_group = [TemplateId::TopBar, TemplateId::CaptionCard];
+    for (title_en, title_zh, list) in [
+        ("Bottom bar", "底条类", &bar_group[..]),
+        ("Special structures", "特殊结构", &special_group[..]),
+    ] {
+        let holding = list.contains(template);
+        egui::CollapsingHeader::new(lang.select(title_en, title_zh))
+            .default_open(holding)
+            .show(ui, |ui| {
+                for &t in list {
+                    if ui
+                        .radio_value(template, t, template_name(lang, t))
+                        .changed()
+                        && t == TemplateId::TwoColumn
+                        && !enabled.contains(&Field::Camera)
+                    {
+                        enabled.push(Field::Camera); // spec §5: Camera 默认开（仅该模板）
+                    }
+                }
+            });
     }
 
     let cfg = theme_for(themes, *template);
+    let spec = template.spec(); // radio may have switched templates
     ui.add_space(10.0);
     ui.heading(lang.select("Layout", "布局"));
     ui.separator();
-    slider(
-        ui,
-        lang.select("Border", "边框宽度"),
-        &mut cfg.border_ratio,
-        0.005..=0.15,
-    );
-    slider(
-        ui,
-        lang.select("Bar height", "参数条高度"),
-        &mut cfg.bar_ratio,
-        0.02..=0.20,
-    );
-    slider(
-        ui,
-        lang.select("Font size", "字号"),
-        &mut cfg.font_scale,
-        0.2..=0.9,
-    );
-    slider(
-        ui,
-        lang.select("Logo size", "Logo 大小"),
-        &mut cfg.logo_scale,
-        0.0..=1.0,
-    );
-    slider(
-        ui,
-        lang.select("Logo vertical", "Logo 上下位置"),
-        &mut cfg.logo_y_offset,
-        -0.5..=0.5,
-    );
-    slider(
-        ui,
-        lang.select("Field spacing", "字段间距"),
-        &mut cfg.part_spacing,
-        0.2..=1.5,
-    );
+    if cfg.margin_top < 0.0 {
+        let b = cfg.border_ratio;
+        cfg.margin_top = b;
+        cfg.margin_bottom = b;
+        cfg.margin_left = b;
+        cfg.margin_right = b;
+    }
+    for (en, zh, slot) in [
+        ("Margin top", "边宽·顶", 0),
+        ("Margin bottom", "边宽·底", 1),
+        ("Margin left", "边宽·左", 2),
+        ("Margin right", "边宽·右", 3),
+    ] {
+        let f = match slot {
+            0 => &mut cfg.margin_top,
+            1 => &mut cfg.margin_bottom,
+            2 => &mut cfg.margin_left,
+            _ => &mut cfg.margin_right,
+        };
+        slider(ui, lang.select(en, zh), f, 0.005..=0.25);
+    }
+    cfg.border_ratio =
+        (cfg.margin_top + cfg.margin_bottom + cfg.margin_left + cfg.margin_right) / 4.0;
+    if spec.bar_edge != BarEdge::Left {
+        ui.horizontal(|ui| {
+            ui.label(lang.select("Bar position", "参数条位置"));
+            for (edge, en, zh) in [
+                (BarEdge::Bottom, "bottom", "下"),
+                (BarEdge::Top, "top", "上"),
+            ] {
+                ui.selectable_value(&mut cfg.bar_position, edge, lang.select(en, zh));
+            }
+        });
+    }
+    if spec.structure != BarStructure::StackedLabeled {
+        slider(
+            ui,
+            lang.select("Bar height", "参数条高度"),
+            &mut cfg.bar_ratio,
+            0.02..=0.20,
+        );
+        slider(
+            ui,
+            lang.select("Font size", "字号"),
+            &mut cfg.font_scale,
+            0.2..=0.9,
+        );
+        slider(
+            ui,
+            lang.select("Field spacing", "字段间距"),
+            &mut cfg.part_spacing,
+            0.2..=1.5,
+        );
+        ui.checkbox(
+            &mut cfg.center_group,
+            lang.select("Center logo + fields", "Logo 与参数整体居中"),
+        );
+        egui::ComboBox::from_label(lang.select("Separator", "分隔符"))
+            .selected_text(match cfg.separator {
+                Separator::Dot => "·",
+                Separator::Bar => "|",
+                Separator::Space => lang.select("space", "空格"),
+            })
+            .show_ui(ui, |ui| {
+                for (s, lab) in [
+                    (Separator::Dot, "·"),
+                    (Separator::Bar, "|"),
+                    (Separator::Space, lang.select("space", "空格")),
+                ] {
+                    ui.selectable_value(&mut cfg.separator, s, lab);
+                }
+            });
+    }
+    ui.checkbox(
+        &mut cfg.show_labels,
+        lang.select("Field labels", "字段标签"),
+    )
+    .on_hover_text(lang.select("only applies to Caption Card", "仅侧边签条生效"));
+    if spec.structure == BarStructure::StackedLabeled && cfg.show_labels {
+        slider(
+            ui,
+            lang.select("Label size", "标签比例"),
+            &mut cfg.label_ratio,
+            0.3..=0.9,
+        );
+    }
 
     ui.add_space(10.0);
     ui.heading(lang.select("Colors", "颜色"));
@@ -195,9 +274,17 @@ pub fn theme_panel(
         LogoMode::Color,
         lang.select("Official colors", "官方配色"),
     );
-    ui.checkbox(
-        &mut cfg.center_group,
-        lang.select("Center logo + fields", "Logo 与参数整体居中"),
+    slider(
+        ui,
+        lang.select("Logo size", "Logo 大小"),
+        &mut cfg.logo_scale,
+        0.0..=1.0,
+    );
+    slider(
+        ui,
+        lang.select("Logo vertical", "Logo 上下位置"),
+        &mut cfg.logo_y_offset,
+        -0.5..=0.5,
     );
 
     ui.add_space(10.0);
@@ -209,6 +296,7 @@ pub fn theme_panel(
             .small(),
     );
     for f in [
+        Field::Camera,
         Field::Lens,
         Field::Focal,
         Field::Aperture,
@@ -226,6 +314,16 @@ pub fn theme_panel(
             }
         }
     }
+
+    ui.add_space(8.0);
+    ui.label(
+        RichText::new(lang.select(
+            "Some options don't apply to the current template.",
+            "部分选项不适用于当前模板。",
+        ))
+        .weak()
+        .small(),
+    );
 }
 
 fn slider(ui: &mut Ui, label: &str, v: &mut f64, range: std::ops::RangeInclusive<f64>) {
@@ -246,6 +344,7 @@ pub fn fields_panel(
 
     ui.add_space(8.0);
     for f in [
+        Field::Camera,
         Field::Lens,
         Field::Focal,
         Field::Aperture,

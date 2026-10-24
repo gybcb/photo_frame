@@ -317,9 +317,11 @@ impl FramelyApp {
             return;
         };
         self.preset_dir = dir.parent().map(Path::to_path_buf).unwrap_or(dir.clone());
+        let mut theme = self.theme();
+        theme.normalize_for_save();
         let payload = PresetFile {
             template: self.template,
-            theme: self.theme(),
+            theme,
             enabled: self.enabled.clone(),
         };
         match serde_json::to_string_pretty(&payload) {

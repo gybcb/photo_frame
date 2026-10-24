@@ -371,35 +371,6 @@ pub fn field_label(lang: Lang, f: framely_core::template::Field) -> &'static str
     )
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use framely_core::template::{Field, TemplateId};
-
-    #[test]
-    fn all_templates_have_chinese_names() {
-        for t in TemplateId::ALL {
-            assert_ne!(template_name(Lang::Zh, t), t.display_name(), "{t:?} missing zh name");
-        }
-    }
-
-    /// The four templates added with the template system must carry the
-    /// finalized names, not the placeholder guesses left by the compile
-    /// lifeline (which a bare non-English check would not catch).
-    #[test]
-    fn new_template_names_are_finalized() {
-        assert_eq!(template_name(Lang::Zh, TemplateId::Polaroid), "拍立得");
-        assert_eq!(template_name(Lang::Zh, TemplateId::TwoColumn), "双栏相机");
-        assert_eq!(template_name(Lang::Zh, TemplateId::TopBar), "顶部参数条");
-        assert_eq!(template_name(Lang::Zh, TemplateId::CaptionCard), "侧边签条");
-    }
-
-    #[test]
-    fn camera_label_is_body() {
-        assert_eq!(field_label(Lang::Zh, Field::Camera), "机身");
-    }
-}
-
 /// Try each candidate path in order; return the first readable file
 /// whose contents parse as a font.
 pub fn find_cjk_font<P: AsRef<Path>>(candidates: &[P]) -> Option<CjkFont> {
@@ -466,4 +437,37 @@ fn face_prefers_simplified(bytes: &[u8], sfnt_off: usize, n_tables: usize) -> bo
             || region.windows(2).any(|w| w == *b"GB");
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use framely_core::template::{Field, TemplateId};
+
+    #[test]
+    fn all_templates_have_chinese_names() {
+        for t in TemplateId::ALL {
+            assert_ne!(
+                template_name(Lang::Zh, t),
+                t.display_name(),
+                "{t:?} missing zh name"
+            );
+        }
+    }
+
+    /// The four templates added with the template system must carry the
+    /// finalized names, not the placeholder guesses left by the compile
+    /// lifeline (which a bare non-English check would not catch).
+    #[test]
+    fn new_template_names_are_finalized() {
+        assert_eq!(template_name(Lang::Zh, TemplateId::Polaroid), "拍立得");
+        assert_eq!(template_name(Lang::Zh, TemplateId::TwoColumn), "双栏相机");
+        assert_eq!(template_name(Lang::Zh, TemplateId::TopBar), "顶部参数条");
+        assert_eq!(template_name(Lang::Zh, TemplateId::CaptionCard), "侧边签条");
+    }
+
+    #[test]
+    fn camera_label_is_body() {
+        assert_eq!(field_label(Lang::Zh, Field::Camera), "机身");
+    }
 }
