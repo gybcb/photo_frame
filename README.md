@@ -21,8 +21,12 @@ cargo fmt --check
 Toolchain: Rust 1.98+ (edition 2024). The code targets macOS, Windows and
 Linux — GUI, file dialogs, font probing and config paths are all
 platform-aware and unit-tested per platform; CI builds and tests on all
-three. Interactive use has only been verified on macOS so far. No
-packaging artifacts (dmg/msi/AppImage) yet.
+three. Interactive use has only been verified on macOS so far. Each
+version tag produces plain binaries on the GitHub Release page
+(`.tar.gz` on macOS/Linux, `.zip` on Windows) — no installers
+(dmg/msi/AppImage), and the binaries are unsigned. The Linux build
+needs GTK3 + X11/Wayland runtime libraries present (standard on desktop
+distros).
 
 > Always run with `--release`. The compositor is per-pixel CPU work and
 > debug builds are an order of magnitude slower (~145 ms vs ~1.4 ms per

@@ -19,8 +19,10 @@ cargo fmt --check
 
 工具链：Rust 1.98+（edition 2024）。代码面向 macOS / Windows / Linux 三
 平台——GUI、文件对话框、字体探测、配置路径均按平台适配，且各有单测；CI
-在三个平台上都构建与测试。交互使用目前只在 macOS 上人工验证过。暂无打包
-产物（dmg/msi/AppImage）。
+在三个平台上都构建与测试。交互使用目前只在 macOS 上人工验证过。每次发版
+在 GitHub Release 页附三平台裸二进制（macOS/Linux 为 `.tar.gz`，Windows
+为 `.zip`）——不做安装包（dmg/msi/AppImage），二进制未签名。Linux 包需要
+系统装有 GTK3 与 X11/Wayland 运行库（桌面发行版一般自带）。
 
 > 务必用 `--release` 运行。合成管线是逐像素 CPU 工作，debug 构建慢一个
 > 数量级（3000px 单帧约 145ms vs 1.4ms），预览会明显卡顿；debug 仅供开发
