@@ -132,6 +132,43 @@ fn framing_carries_the_original_app1_byte_for_byte() {
     );
 }
 
+/// Layout matching nikon_rot6.jpg as decoded: stored 120x80 with
+/// orientation 6, so the upright photo is 80x120.
+fn nikon_frame() -> FrameLayout {
+    minimal_layout(Brand::Nikon, 80, 120, vec![])
+}
+
+#[test]
+fn framing_patches_a_rotated_sources_orientation_to_normal() {
+    // Pixels were rotated upright by the decode step, so the carried
+    // EXIF must stop telling viewers to rotate again: the framed
+    // output's orientation tag reads 1.
+    let out = jpeg::frame_bytes(&fixture("nikon_rot6.jpg"), nikon_frame(), 92).unwrap();
+    assert_eq!(
+        read_ushort(&out, TAG_ORIENTATION),
+        Some(1),
+        "a photo rotated at decode must not keep its old orientation"
+    );
+}
+
+#[test]
+fn the_only_app1_change_is_the_orientation_value_field() {
+    // The byte-exact promise, tightened: of the two APP1 payloads, only
+    // the 2 bytes of the orientation value may differ (6 -> 1, big-
+    // endian fixture). Everything else — MakerNote, offsets, all other
+    // tags — must be untouched.
+    let src = fixture("nikon_rot6.jpg");
+    let out = jpeg::frame_bytes(&src, nikon_frame(), 92).unwrap();
+    let (a, b) = (app1_payload(&src).unwrap(), app1_payload(&out).unwrap());
+    assert_eq!(a.len(), b.len());
+    let diff: Vec<usize> = (0..a.len()).filter(|i| a[*i] != b[*i]).collect();
+    // The payload is the raw TIFF. Probe: IFD0 entry at offset 34, the
+    // big-endian SHORT's low byte lives at 43; only that byte changes.
+    assert_eq!(diff, vec![43], "payload bytes differ at {diff:?}");
+    assert_eq!(&a[42..44], &[0x00, 0x06]);
+    assert_eq!(&b[42..44], &[0x00, 0x01]);
+}
+
 #[test]
 fn exif_fields_survive_a_full_frame_roundtrip() {
     let src = fixture("sony.jpg");

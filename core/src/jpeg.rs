@@ -163,16 +163,81 @@ fn splice_app1(encoded: Vec<u8>, exif_payload: Option<&[u8]>) -> Vec<u8> {
     if find_app1(&encoded).is_some() {
         return encoded;
     }
+    let payload = normalize_orientation(payload);
     // segment: FFE1 <len> "Exif\0\0" <payload>; len covers itself + body.
     let body_len = 6 + payload.len() + 2;
     let mut seg = Vec::with_capacity(body_len + 2);
     seg.extend_from_slice(&[0xFF, 0xE1]);
     seg.extend_from_slice(&(body_len as u16).to_be_bytes());
     seg.extend_from_slice(b"Exif\0\0");
-    seg.extend_from_slice(payload);
+    seg.extend_from_slice(&payload);
     let mut out = Vec::with_capacity(encoded.len() + seg.len());
     out.extend_from_slice(&encoded[..2]); // SOI
     out.extend_from_slice(&seg);
     out.extend_from_slice(&encoded[2..]);
     out
+}
+
+/// Rewrite *only* the Orientation (0x0112) tag's value to 1 (Normal).
+///
+/// We always bake the orientation into pixels at decode, so a carried
+/// tag of 6 would make viewers rotate the finished frame a second time.
+/// Re-serializing EXIF is off the table (MakerNote offsets), so instead
+/// we locate the inline SHORT value inside IFD0 and patch those 2 bytes;
+/// every other byte — MakerNote, all offsets, all other tags — stays
+/// untouched. Best-effort: anything malformed returns the input as-is
+/// (a stale orientation tag is cosmetic; corrupting the block is not).
+fn normalize_orientation(payload: &[u8]) -> Vec<u8> {
+    fn u16_at(b: &[u8], at: usize, le: bool) -> Option<usize> {
+        let v = b.get(at..at + 2)?.try_into().ok()?;
+        Some(if le {
+            u16::from_le_bytes(v)
+        } else {
+            u16::from_be_bytes(v)
+        } as usize)
+    }
+    fn u32_at(b: &[u8], at: usize, le: bool) -> Option<usize> {
+        let v = b.get(at..at + 4)?.try_into().ok()?;
+        Some(if le {
+            u32::from_le_bytes(v)
+        } else {
+            u32::from_be_bytes(v)
+        } as usize)
+    }
+
+    let le = match payload.get(..2) {
+        Some(b"II") => true,
+        Some(b"MM") => false,
+        _ => return payload.to_vec(),
+    };
+    let Some(ifd0) = u32_at(payload, 4, le) else {
+        return payload.to_vec();
+    };
+    let Some(count) = u16_at(payload, ifd0, le) else {
+        return payload.to_vec();
+    };
+    for k in 0..count {
+        let entry = ifd0 + 2 + k * 12;
+        if u16_at(payload, entry, le) != Some(0x0112) {
+            continue; // reads are bounds-checked, so a truncated
+            // table simply never matches
+        }
+        // Patch only the canonical shape: 1 SHORT stored inline in the
+        // 4-byte value field (type 3, count 1). Anything else — absent,
+        // another type — we leave alone rather than restructure.
+        let typ = u16_at(payload, entry + 2, le);
+        let n = u32_at(payload, entry + 4, le);
+        if typ != Some(3) || n != Some(1) {
+            return payload.to_vec();
+        }
+        let mut out = payload.to_vec();
+        let vs = if le {
+            1u16.to_le_bytes()
+        } else {
+            1u16.to_be_bytes()
+        };
+        out[entry + 8..entry + 10].copy_from_slice(&vs);
+        return out;
+    }
+    payload.to_vec() // no orientation tag: nothing to do
 }
