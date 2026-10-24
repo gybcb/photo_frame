@@ -15,7 +15,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --check
 ```
 
-工具链：Rust 1.98+（edition 2024）。代码本身跨平台，但只在 macOS 上验证。
+工具链：Rust 1.98+（edition 2024）。代码跨 macOS / Windows / Linux 三平台
+（GUI、对话框、字体探测、配置路径均按平台适配，平台逻辑有单测）；实测
+验证目前只在 macOS 做过，Windows / Linux 需自行跑一次确认。无打包产物。
 
 > 务必用 `--release` 运行。合成管线是逐像素 CPU 工作，debug 构建比
 > release 慢一个数量级（3000px 单帧约 145ms vs 1.4ms），预览会明显
@@ -81,10 +83,17 @@ Logo 资产来源与许可（Wikimedia Commons，PD-textlogo + Trademarked 提�
 
 ## 语言
 
-- 界面支持英文 / 中文，顶栏按钮一键切换，选择持久化在 `~/.framely/config.json`。
-- 首次运行跟随系统 `LANG` 环境变量（`zh*` 前缀进中文）。
-- 中文字体不打包进二进制：运行时探测系统 CJK 字体（PingFang / 冬青黑体 /
-  华文黑体 / Noto Sans CJK），探不到时界面保持纯英文、切换按钮不出现。
+- 界面支持英文 / 中文，顶栏按钮一键切换，选择持久化在配置文件中：
+  macOS `~/.framely/config.json`（历史位置，不变）、Linux
+  `$XDG_CONFIG_HOME/framely/config.json`（无则 `~/.config/framely/`）、
+  Windows `%APPDATA%\framely\config.json`。
+- 首次运行跟随系统 `LANG` 环境变量（`zh*` 前缀进中文）。Windows 没有
+  `LANG`，默认英文，切换按钮可改。
+- 中文字体不打包进二进制：运行时探测系统 CJK 字体，探不到时界面保持
+  纯英文、切换按钮不出现。搜索顺序：macOS PingFang / 冬青黑体 / 华文黑体；
+  Windows `msyh.ttc`（微软雅黑，`%WINDIR%\Fonts`）→ `simhei.ttf` →
+  `simsun.ttc`；Linux Noto Sans CJK（Debian/Ubuntu、Arch、Fedora 常见
+  目录）→ 文泉驿微米黑 / 正黑。
 - CJK 字体追加在字体族末尾并缩放至 0.84：汉字填满 em 方框而拉丁只到
   cap height，同字号下汉字会显大；冬青一类字体 `hhea.lineGap = 0.5em`
   的行距还会让 egui 的逐字垂直居中把汉字顶出行框被裁。缩放同时解决

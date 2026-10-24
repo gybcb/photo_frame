@@ -5,7 +5,7 @@
 
 use eframe::egui;
 
-use framely_app::i18n::{CJK_CANDIDATES, egui_fonts, find_cjk_font};
+use framely_app::i18n::{cjk_candidates, egui_fonts, find_cjk_font};
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -21,7 +21,7 @@ fn main() -> eframe::Result {
         Box::new(|cc| {
             // Chinese renders only via a system CJK font (kept out of the
             // binary); if none is found, the app stays English-only.
-            let font = find_cjk_font(CJK_CANDIDATES);
+            let font = find_cjk_font(&cjk_candidates());
             if let Some(f) = &font {
                 cc.egui_ctx.set_fonts(egui_fonts(f));
             }

@@ -6,10 +6,128 @@
 //! egui-recommended pattern: no key table to drift, and an English
 //! original is always visible next to its translation.
 
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+
+/// Host platform family, for the pieces that differ per OS: where Chinese
+/// fonts live, and where preferences belong. Injected explicitly (never
+/// read from `cfg!`) so all three paths compile and test on any host.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Platform {
+    Macos,
+    Windows,
+    Linux,
+}
+
+impl Platform {
+    /// The platform this binary is running on.
+    pub fn current() -> Platform {
+        if cfg!(target_os = "macos") {
+            Platform::Macos
+        } else if cfg!(windows) {
+            Platform::Windows
+        } else {
+            Platform::Linux
+        }
+    }
+}
+
+/// Candidate font files for Chinese on `platform`, in preference order.
+/// `env` reads an environment variable (injectable for tests); Windows
+/// uses it for `WINDIR`.
+pub fn cjk_candidates_on(
+    platform: Platform,
+    env: &dyn Fn(&str) -> Option<OsString>,
+) -> Vec<PathBuf> {
+    let paths: Vec<PathBuf> = match platform {
+        Platform::Macos => [
+            "/System/Library/Fonts/PingFang.ttc",
+            "/System/Library/Fonts/Hiragino Sans GB.ttc",
+            "/System/Library/Fonts/STHeiti Light.ttc",
+        ]
+        .iter()
+        .map(PathBuf::from)
+        .collect(),
+        Platform::Linux => [
+            // Debian/Ubuntu (fonts-noto-cjk)
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            // Arch (noto-fonts-cjk)
+            "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+            // Fedora 38+ (google-noto-sans-cjk-fonts)
+            "/usr/share/fonts/google-noto-sans-cjk-fonts/NotoSansCJK-Regular.ttc",
+            // Older Fedora/RHEL
+            "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+            // WenQuanYi Micro Hei (the classic Linux CJK fallback)
+            "/usr/share/fonts/wqy-microhei/wqy-microhei.ttc",
+            "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+            "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+        ]
+        .iter()
+        .map(PathBuf::from)
+        .collect(),
+        Platform::Windows => {
+            // Microsoft YaHei ships with every Chinese-capable Windows;
+            // its TTC's face 0 is the SC face. Fall back to GDI's msyh.ttf
+            // shape only as a name guess — reading is the real filter.
+            let windir = env("WINDIR")
+                .and_then(|w| w.into_string().ok())
+                .unwrap_or_else(|| "C:\\Windows".into());
+            [
+                format!("{windir}\\Fonts\\msyh.ttc"),
+                format!("{windir}\\Fonts\\msyh.ttf"),
+                format!("{windir}\\Fonts\\simhei.ttf"),
+                // Older installs kept fonts under the Windows dir itself.
+                format!("{windir}\\Fonts\\simsun.ttc"),
+            ]
+            .iter()
+            .map(PathBuf::from)
+            .collect()
+        }
+    };
+    paths
+}
+
+/// Preference-file location on `platform`, reading vars through `env`:
+/// macOS keeps the historical `~/.framely` (existing users' configs stay
+/// valid); Linux follows XDG; Windows uses `%APPDATA%`. A cwd file is the
+/// last resort so nothing ever panics on a bare environment.
+pub fn config_path_on(platform: Platform, env: &dyn Fn(&str) -> Option<OsString>) -> PathBuf {
+    let file = |dir: &OsStr| PathBuf::from(dir).join("framely").join("config.json");
+    match platform {
+        // Historical location — do not "fix" this to XDG, or upgrades lose
+        // the saved language choice.
+        Platform::Macos => env("HOME")
+            .map(|h| PathBuf::from(h).join(".framely").join("config.json"))
+            .unwrap_or_else(|| PathBuf::from("framely-config.json")),
+        Platform::Linux => env("XDG_CONFIG_HOME")
+            .or_else(|| env("HOME").map(|h| PathBuf::from(h).join(".config").into_os_string()))
+            .map(|d| file(&d))
+            .unwrap_or_else(|| PathBuf::from("framely-config.json")),
+        Platform::Windows => env("APPDATA")
+            .map(|d| file(&d))
+            .unwrap_or_else(|| PathBuf::from("framely-config.json")),
+    }
+}
+
+/// Home directory on `platform` (`%USERPROFILE%` on Windows, `$HOME`
+/// elsewhere; `.` when nothing is set). Used for dialog defaults.
+pub fn home_dir_on(platform: Platform, env: &dyn Fn(&str) -> Option<OsString>) -> PathBuf {
+    let key = match platform {
+        Platform::Windows => "USERPROFILE",
+        Platform::Macos | Platform::Linux => "HOME",
+    };
+    env(key)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// This machine's home directory (see [`home_dir_on`]).
+pub fn home_dir() -> PathBuf {
+    home_dir_on(Platform::current(), &|k| std::env::var_os(k))
+}
 
 /// The two UI languages.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -134,7 +252,8 @@ pub enum Msg {
     Failed(Action, String),
 }
 
-/// User preferences persisted to `~/.framely/config.json`.
+/// User preferences, persisted to the per-platform config file
+/// (see [`config_path`]).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Config {
     /// `None` = follow the system locale.
@@ -171,12 +290,9 @@ pub struct CjkFont {
 }
 
 /// Where Chinese might come from on this machine, in preference order.
-pub const CJK_CANDIDATES: &[&str] = &[
-    "/System/Library/Fonts/PingFang.ttc",
-    "/System/Library/Fonts/Hiragino Sans GB.ttc",
-    "/System/Library/Fonts/STHeiti Light.ttc",
-    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-];
+pub fn cjk_candidates() -> Vec<PathBuf> {
+    cjk_candidates_on(Platform::current(), &|k| std::env::var_os(k))
+}
 
 /// CJK glyphs fill their em box while Latin only reaches cap height, so
 /// at equal point sizes Chinese looks noticeably bigger. It also keeps
@@ -212,12 +328,11 @@ pub fn egui_fonts(font: &CjkFont) -> egui::FontDefinitions {
     fonts
 }
 
-/// The persisted-config location: `~/.framely/config.json` (cwd fallback
-/// when HOME is unset).
+/// The persisted-config location on this platform (see
+/// [`config_path_on`]: `~/.framely`, `$XDG_CONFIG_HOME/framely`, or
+/// `%APPDATA%\framely`; cwd file as last resort).
 pub fn config_path() -> PathBuf {
-    std::env::var_os("HOME")
-        .map(|h| PathBuf::from(h).join(".framely").join("config.json"))
-        .unwrap_or_else(|| PathBuf::from("framely-config.json"))
+    config_path_on(Platform::current(), &|k| std::env::var_os(k))
 }
 
 /// Localized template display name. Translations live on the app side;
@@ -253,12 +368,13 @@ pub fn field_label(lang: Lang, f: framely_core::template::Field) -> &'static str
 
 /// Try each candidate path in order; return the first readable file
 /// whose contents parse as a font.
-pub fn find_cjk_font(candidates: &[&str]) -> Option<CjkFont> {
+pub fn find_cjk_font<P: AsRef<Path>>(candidates: &[P]) -> Option<CjkFont> {
     candidates.iter().find_map(|p| {
-        let bytes = fs::read(p).ok()?;
+        let path = p.as_ref();
+        let bytes = fs::read(path).ok()?;
         let (face_count, index) = pick_face(&bytes)?;
         Some(CjkFont {
-            path: PathBuf::from(p),
+            path: path.to_path_buf(),
             bytes,
             index,
             face_count,

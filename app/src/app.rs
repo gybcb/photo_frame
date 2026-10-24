@@ -106,9 +106,7 @@ impl Default for FramelyApp {
             status: None,
             rendering: false,
             rx: None,
-            preset_dir: std::env::var_os("HOME")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from(".")),
+            preset_dir: crate::i18n::home_dir(),
             batch_files: Vec::new(),
             batch_total: 0,
             batch_done: 0,
