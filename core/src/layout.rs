@@ -2,7 +2,7 @@
 //! drawing operations, every dimension derived from the canvas scale.
 
 use crate::brand::Brand;
-use crate::template::{Field, Fields, ThemeConfig, TemplateId};
+use crate::template::{Field, Fields, TemplateId, ThemeConfig};
 
 /// Text anchor within its region box.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -116,10 +116,7 @@ pub fn layout(
         TemplateId::Magazine => {
             let lines: Vec<String> = if two_lines {
                 let mid = fields.parts.len().div_ceil(2);
-                vec![
-                    join(&fields.parts[..mid]),
-                    join(&fields.parts[mid..]),
-                ]
+                vec![join(&fields.parts[..mid]), join(&fields.parts[mid..])]
             } else {
                 vec![joined_text(&fitted)]
             };

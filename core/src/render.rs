@@ -23,7 +23,7 @@ fn with_font<R>(f: impl FnOnce(&Font) -> R) -> R {
     FONTS.with(|slot| {
         let mut slot = slot.borrow_mut();
         let font = slot.get_or_insert_with(|| {
-            Font::from_bytes(FONT_REGULAR.to_vec(), FontSettings::default())
+            Font::from_bytes(FONT_REGULAR, FontSettings::default())
                 .expect("embedded font must parse")
         });
         f(font)
@@ -51,8 +51,11 @@ struct LogoKey {
     height: u32,
 }
 
+/// A rasterized glyph: coverage mask plus its metrics.
+type Glyph = (Metrics, Vec<u8>);
+
 /// Shared rasterized-glyph cache (bounded).
-static GLYPHS: LazyLock<Mutex<HashMap<(char, u32), (Vec<u8>, Metrics)>>> =
+static GLYPHS: LazyLock<Mutex<HashMap<(char, u32), Glyph>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Compose `photo` into the framed `layout`, returning the full canvas RGBA.
@@ -93,7 +96,12 @@ pub fn compose(
                 width,
                 height,
             } => blit_logo(
-                &mut canvas, *brand, logo_mode, fg, layout.background, *x, *y, *width, *height,
+                &mut canvas,
+                *brand,
+                logo_mode,
+                fg,
+                layout.background,
+                (*x, *y, *width, *height),
             )?,
             DrawOp::Text {
                 content,
@@ -126,10 +134,7 @@ fn blit_logo(
     mode: LogoMode,
     fg: [u8; 4],
     bg: [u8; 4],
-    x: u32,
-    y: u32,
-    width: u32,
-    height: u32,
+    (x, y, width, height): (u32, u32, u32, u32),
 ) -> Result<(), FrameError> {
     if width == 0 || height == 0 {
         return Ok(());
@@ -172,8 +177,7 @@ impl Sprite {
         Sprite {
             width: self.width,
             height: self.height,
-            pixels: self.pixels.clone()
-            
+            pixels: self.pixels.clone(),
         }
     }
 }
@@ -201,7 +205,11 @@ fn rasterize_logo(
     let sy = height as f32 / src.height();
     let mut pixmap = resvg::tiny_skia::Pixmap::new(width, height)
         .ok_or_else(|| FrameError::Render("bad logo size".into()))?;
-    resvg::render(&tree, usvg::Transform::from_scale(sx, sy), &mut pixmap.as_mut());
+    resvg::render(
+        &tree,
+        usvg::Transform::from_scale(sx, sy),
+        &mut pixmap.as_mut(),
+    );
     // tiny-skia stores premultiplied RGBA; un-premultiply for our blend.
     let pixels = pixmap
         .pixels()
@@ -312,23 +320,27 @@ fn draw_text(
     });
 }
 
-fn rasterize_glyph(font: &Font, ch: char, size_px: u32) -> (Metrics, Vec<u8>) {
+fn rasterize_glyph(font: &Font, ch: char, size_px: u32) -> Glyph {
     let key = (ch, size_px);
     {
         let guard = GLYPHS.lock().unwrap();
-        if let Some((coverage, metrics)) = guard.get(&key) {
-            return (*metrics, coverage.clone());
+        if let Some(glyph) = guard.get(&key) {
+            return (glyph.0, glyph.1.clone());
         }
     }
-    let (metrics, coverage) = font.rasterize(ch, size_px as f32);
+    let glyph @ (metrics, _) = font.rasterize(ch, size_px as f32);
     {
         let mut guard = GLYPHS.lock().unwrap();
         if guard.len() > 4096 {
             guard.clear();
         }
-        guard.insert(key, (coverage.clone(), metrics));
+        guard.insert(key, (metrics, coverage_of(&glyph)));
     }
-    (metrics, coverage)
+    glyph
+}
+
+fn coverage_of(glyph: &Glyph) -> Vec<u8> {
+    glyph.1.clone()
 }
 
 /// Draw one coverage-mask glyph at pen position (pen_x, baseline).
@@ -362,7 +374,11 @@ fn draw_glyph(
             canvas.put_pixel(
                 px as u32,
                 py as u32,
-                over([color[0], color[1], color[2]], cov as u8, canvas.get_pixel(px as u32, py as u32).0),
+                over(
+                    [color[0], color[1], color[2]],
+                    cov as u8,
+                    canvas.get_pixel(px as u32, py as u32).0,
+                ),
             );
         }
     }

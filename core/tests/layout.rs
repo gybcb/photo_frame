@@ -3,7 +3,7 @@
 
 use framely_core::brand::Brand;
 use framely_core::layout::{Align, DrawOp, FrameLayout, layout};
-use framely_core::template::{Field, Fields, ThemeConfig, TemplateId};
+use framely_core::template::{Field, Fields, TemplateId, ThemeConfig};
 
 fn all_fields() -> Fields {
     Fields {
@@ -42,7 +42,13 @@ fn texts(l: &FrameLayout) -> Vec<String> {
 #[test]
 fn white_studio_places_photo_inside_border_and_adds_bar_to_bottom() {
     // short side 1333, default border ratio 4% -> 53px
-    let l = lay(2000, 1333, TemplateId::WhiteStudio, &all_fields(), Brand::Sony);
+    let l = lay(
+        2000,
+        1333,
+        TemplateId::WhiteStudio,
+        &all_fields(),
+        Brand::Sony,
+    );
     assert_eq!(l.border, 53);
     assert_eq!(l.canvas_width, 2000 + 2 * 53);
     assert_eq!(l.photo_rect, (53, 53, 2000, 1333));
@@ -53,8 +59,20 @@ fn white_studio_places_photo_inside_border_and_adds_bar_to_bottom() {
 #[test]
 fn geometry_scales_linearly_with_canvas() {
     // Dimensions chosen so ratio rounding lands on exact integers.
-    let small = lay(1875, 1250, TemplateId::WhiteStudio, &all_fields(), Brand::Sony);
-    let big = lay(3750, 2500, TemplateId::WhiteStudio, &all_fields(), Brand::Sony);
+    let small = lay(
+        1875,
+        1250,
+        TemplateId::WhiteStudio,
+        &all_fields(),
+        Brand::Sony,
+    );
+    let big = lay(
+        3750,
+        2500,
+        TemplateId::WhiteStudio,
+        &all_fields(),
+        Brand::Sony,
+    );
     assert_eq!(big.border, small.border * 2);
     assert_eq!(big.bar_height, small.bar_height * 2);
     let small_font = small.ops.iter().find_map(|o| match o {
@@ -70,8 +88,17 @@ fn geometry_scales_linearly_with_canvas() {
 
 #[test]
 fn white_studio_has_logo_left_and_text_right() {
-    let l = lay(2000, 1333, TemplateId::WhiteStudio, &all_fields(), Brand::Sony);
-    assert!(l.ops.iter().any(|o| matches!(o, DrawOp::Logo { .. })), "logo missing");
+    let l = lay(
+        2000,
+        1333,
+        TemplateId::WhiteStudio,
+        &all_fields(),
+        Brand::Sony,
+    );
+    assert!(
+        l.ops.iter().any(|o| matches!(o, DrawOp::Logo { .. })),
+        "logo missing"
+    );
     let aligns: Vec<Align> = l
         .ops
         .iter()
@@ -85,7 +112,13 @@ fn white_studio_has_logo_left_and_text_right() {
 
 #[test]
 fn logo_keeps_aspect_ratio_and_fits_the_bar() {
-    let l = lay(2000, 1333, TemplateId::WhiteStudio, &all_fields(), Brand::Sony);
+    let l = lay(
+        2000,
+        1333,
+        TemplateId::WhiteStudio,
+        &all_fields(),
+        Brand::Sony,
+    );
     let (w, h) = l
         .ops
         .iter()
@@ -100,14 +133,26 @@ fn logo_keeps_aspect_ratio_and_fits_the_bar() {
 
 #[test]
 fn unknown_brand_omits_logo_but_keeps_text() {
-    let l = lay(2000, 1333, TemplateId::WhiteStudio, &all_fields(), Brand::Unknown);
+    let l = lay(
+        2000,
+        1333,
+        TemplateId::WhiteStudio,
+        &all_fields(),
+        Brand::Unknown,
+    );
     assert!(!l.ops.iter().any(|o| matches!(o, DrawOp::Logo { .. })));
     assert!(!texts(&l).is_empty());
 }
 
 #[test]
 fn magazine_breaks_fields_across_two_lines() {
-    let l = lay(2000, 1333, TemplateId::Magazine, &all_fields(), Brand::Hasselblad);
+    let l = lay(
+        2000,
+        1333,
+        TemplateId::Magazine,
+        &all_fields(),
+        Brand::Hasselblad,
+    );
     assert!(
         texts(&l).len() >= 2,
         "magazine should split fields into lines, got {:?}",
@@ -117,7 +162,13 @@ fn magazine_breaks_fields_across_two_lines() {
 
 #[test]
 fn black_bar_uses_dark_background_and_light_text() {
-    let l = lay(2000, 1333, TemplateId::BlackBar, &all_fields(), Brand::Nikon);
+    let l = lay(
+        2000,
+        1333,
+        TemplateId::BlackBar,
+        &all_fields(),
+        Brand::Nikon,
+    );
     assert_eq!(l.background, [17, 17, 17, 255]);
     let color = l.ops.iter().find_map(|o| match o {
         DrawOp::Text { color, .. } => Some(*color),
@@ -135,7 +186,10 @@ fn overflowing_fields_drop_by_priority_iso_survives_date_goes_first() {
         &Fields {
             parts: vec![
                 (Field::Date, "2026-10-24".into()),
-                (Field::Lens, "Some Remarkably Verbose Zoom Lens Model Edition".into()),
+                (
+                    Field::Lens,
+                    "Some Remarkably Verbose Zoom Lens Model Edition".into(),
+                ),
                 (Field::Aperture, "f/1.4".into()),
                 (Field::Shutter, "1/8000".into()),
                 (Field::Iso, "ISO25600".into()),
@@ -146,8 +200,14 @@ fn overflowing_fields_drop_by_priority_iso_survives_date_goes_first() {
     );
     let shown = texts(&l).join(" ");
     assert!(!shown.contains("2026"), "date dropped first, got {shown}");
-    assert!(!shown.contains("long"), "lens dropped before the exposure trio");
-    assert!(shown.contains("ISO25600") && shown.contains("f/1.4"), "core trio survives: {shown}");
+    assert!(
+        !shown.contains("long"),
+        "lens dropped before the exposure trio"
+    );
+    assert!(
+        shown.contains("ISO25600") && shown.contains("f/1.4"),
+        "core trio survives: {shown}"
+    );
 }
 
 #[test]

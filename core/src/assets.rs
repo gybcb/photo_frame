@@ -17,12 +17,7 @@ pub enum LogoMode {
 /// and background, e.g. Leica's disc takes the fg and its knocked-out
 /// wordmark takes the bg); they are substituted here. `Brand::Unknown` has
 /// no logo and returns `None` — callers fall back to a text-only frame.
-pub fn logo_svg(
-    brand: Brand,
-    mode: LogoMode,
-    fg: [u8; 4],
-    bg: [u8; 4],
-) -> Option<Vec<u8>> {
+pub fn logo_svg(brand: Brand, mode: LogoMode, fg: [u8; 4], bg: [u8; 4]) -> Option<Vec<u8>> {
     if brand == Brand::Unknown {
         return None;
     }
@@ -36,22 +31,12 @@ pub fn logo_svg(
         ("canon", LogoMode::Color) => include_bytes!("../../assets/brand/canon.color.svg"),
         ("leica", LogoMode::Mono) => include_bytes!("../../assets/brand/leica.mono.svg"),
         ("leica", LogoMode::Color) => include_bytes!("../../assets/brand/leica.color.svg"),
-        (
-            "hasselblad",
-            LogoMode::Mono,
-        ) => include_bytes!("../../assets/brand/hasselblad.mono.svg"),
-        (
-            "hasselblad",
-            LogoMode::Color,
-        ) => include_bytes!("../../assets/brand/hasselblad.color.svg"),
-        (
-            "phaseone",
-            LogoMode::Mono,
-        ) => include_bytes!("../../assets/brand/phaseone.mono.svg"),
-        (
-            "phaseone",
-            LogoMode::Color,
-        ) => include_bytes!("../../assets/brand/phaseone.color.svg"),
+        ("hasselblad", LogoMode::Mono) => include_bytes!("../../assets/brand/hasselblad.mono.svg"),
+        ("hasselblad", LogoMode::Color) => {
+            include_bytes!("../../assets/brand/hasselblad.color.svg")
+        }
+        ("phaseone", LogoMode::Mono) => include_bytes!("../../assets/brand/phaseone.mono.svg"),
+        ("phaseone", LogoMode::Color) => include_bytes!("../../assets/brand/phaseone.color.svg"),
         ("alpa", LogoMode::Mono) => include_bytes!("../../assets/brand/alpa.mono.svg"),
         ("alpa", LogoMode::Color) => include_bytes!("../../assets/brand/alpa.color.svg"),
         _ => return None,
