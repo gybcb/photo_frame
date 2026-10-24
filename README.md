@@ -58,8 +58,11 @@ The app is not code-signed or notarized, so how you launch it matters:
 
 - **Open photos** — drag into the window, or use the toolbar button
   (`rfd` dialog); multiple selection feeds the batch list.
-- **Theme panel (left)** — 4 templates (White Studio / Black Bar /
-  Minimal / Magazine). Border width, strip height, font size,
+- **Theme panel (left)** — 8 templates (White Studio / Black Bar /
+  Minimal / Magazine / Polaroid / Two-Column / Top Bar / Caption
+  Card). Each template shows the options that apply to it: four
+  independent margins, strip height, bar position (top/bottom),
+  separator, field labels, camera-body field, font size,
   foreground/background colors, field toggles and order, mono vs.
   official-color logo, and logo+fields centered as one group — all
   adjustable, and save/load-able as a JSON preset (dialogs default to
