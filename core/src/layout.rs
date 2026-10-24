@@ -114,6 +114,17 @@ pub fn layout(
             }
         }
         TemplateId::Magazine => {
+            // One logo, vertically centered in the bar; parameter text as
+            // two right-anchored lines to its right.
+            if has_logo {
+                ops.push(DrawOp::Logo {
+                    brand,
+                    x: border + inner_pad,
+                    y: bar_y + (bar - logo_h.max(1)) / 2,
+                    width: logo_slot,
+                    height: logo_h.max(1),
+                });
+            }
             let lines: Vec<String> = if two_lines {
                 let mid = fields.parts.len().div_ceil(2);
                 vec![join(&fields.parts[..mid]), join(&fields.parts[mid..])]
@@ -121,44 +132,22 @@ pub fn layout(
                 vec![joined_text(&fitted)]
             };
             let line_h = (bar / lines.len().max(1) as u32).max(1);
-            let text_size = (line_h as f64 * theme.font_scale)
-                .round()
-                .clamp(9.0, font.max(9) as f64) as u32;
             for (i, content) in lines.iter().enumerate() {
-                let ly = bar_y + i as u32 * line_h;
-                if has_logo {
-                    let lh = (line_h as f64 * theme.logo_scale.max(0.4)).round() as u32;
-                    let lw = (lh as f64 * logo_ratio).round() as u32;
-                    ops.push(DrawOp::Logo {
-                        brand,
-                        x: border + inner_pad,
-                        y: ly + (line_h - lh) / 2,
-                        width: lw,
-                        height: lh,
-                    });
-                    if !content.is_empty() {
-                        ops.push(DrawOp::Text {
-                            content: content.clone(),
-                            size_px: text_size,
-                            color: theme.foreground,
-                            align: Align::Right,
-                            rect: (
-                                border + inner_pad + lw + gap,
-                                ly,
-                                photo_w.saturating_sub(2 * inner_pad + lw + gap),
-                                line_h,
-                            ),
-                        });
-                    }
-                } else if !content.is_empty() {
-                    ops.push(DrawOp::Text {
-                        content: content.clone(),
-                        size_px: text_size,
-                        color: theme.foreground,
-                        align: Align::Center,
-                        rect: (border + inner_pad, ly, photo_w - 2 * inner_pad, line_h),
-                    });
+                if content.is_empty() {
+                    continue;
                 }
+                ops.push(DrawOp::Text {
+                    content: content.clone(),
+                    size_px: fitted.size_px.min((line_h as f64 * 0.8) as u32),
+                    color: theme.foreground,
+                    align: Align::Right,
+                    rect: (
+                        border + inner_pad + logo_slot + gap,
+                        bar_y + i as u32 * line_h,
+                        photo_w.saturating_sub(2 * inner_pad + logo_slot + gap),
+                        line_h,
+                    ),
+                });
             }
         }
     }

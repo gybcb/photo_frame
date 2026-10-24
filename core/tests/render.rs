@@ -114,6 +114,42 @@ fn dark_bar_theme_paints_light_text() {
     );
 }
 
+#[test]
+fn separator_dots_ride_mid_xheight_not_below_the_baseline() {
+    // Render a line that is *only* separators (U+00B7) so no letter ink can
+    // mask their placement. Correct placement puts the dot's ink band near
+    // mid x-height; the broken baseline math drops it well below the
+    // baseline, into the bar's lower third.
+    let fields = Fields {
+        parts: vec![],
+        custom_line: Some("· · · · ·".into()),
+    };
+    let l = layout(
+        TemplateId::WhiteStudio,
+        2000,
+        1500,
+        Brand::Unknown,
+        5.0,
+        &ThemeConfig::default_for(TemplateId::WhiteStudio),
+        &fields,
+    );
+    let out = compose(&gray_photo(2000, 1500, 128), &l, LogoMode::Mono).unwrap();
+    let (bx, by, bw, bh) = (
+        l.border,
+        l.border + l.photo_rect.3,
+        l.canvas_width - 2 * l.border,
+        l.bar_height,
+    );
+    let ink = count_near(&out, [26, 26, 26], 90, (bx, by, bw, bh));
+    assert!(ink > 20, "dots must be drawn at all, got {ink}");
+    // Lower third of the bar: only a wrongly-placed dot reaches this far down.
+    let low = count_near(&out, [26, 26, 26], 90, (bx, by + bh * 2 / 3, bw, bh / 3));
+    assert_eq!(low, 0, "dots sank below the baseline into the bar's bottom");
+    // Their band: the bar's middle (upper third would only catch ascenders).
+    let mid = count_near(&out, [26, 26, 26], 90, (bx, by + bh / 4, bw, bh / 2));
+    assert!(mid > 20, "dot ink belongs mid-bar, upper-mid ink was {mid}");
+}
+
 /// (x, y, w, h) of the first logo op, as a region for sampling.
 fn logo_box(l: &FrameLayout) -> (u32, u32, u32, u32) {
     l.ops

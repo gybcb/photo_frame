@@ -356,7 +356,11 @@ fn draw_glyph(
         return;
     }
     let left = (pen_x + m.xmin as f32).floor() as i32;
-    let top = (baseline + (m.ymin - m.height as i32) as f32).floor() as i32;
+    // The glyph box is `height` tall and its bottom edge sits `ymin` above
+    // the baseline, so the top is at `baseline - (ymin + height)`. (Letters
+    // have ymin ≈ 0, which hid the mistake: mid-height marks like `·` were
+    // placed below the baseline instead of at x-height.)
+    let top = (baseline - (m.ymin + m.height as i32) as f32).floor() as i32;
     for row in 0..m.height {
         let py = top + row as i32;
         if py < 0 || py as u32 >= canvas.height() {

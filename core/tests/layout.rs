@@ -161,6 +161,24 @@ fn magazine_breaks_fields_across_two_lines() {
 }
 
 #[test]
+fn magazine_shows_the_logo_once() {
+    // Two text lines must not mean two logos: the brand mark stands once.
+    let l = lay(
+        2000,
+        1333,
+        TemplateId::Magazine,
+        &all_fields(),
+        Brand::Hasselblad,
+    );
+    let logos = l
+        .ops
+        .iter()
+        .filter(|o| matches!(o, DrawOp::Logo { .. }))
+        .count();
+    assert_eq!(logos, 1, "magazine drew {logos} logos, expected exactly 1");
+}
+
+#[test]
 fn black_bar_uses_dark_background_and_light_text() {
     let l = lay(
         2000,
