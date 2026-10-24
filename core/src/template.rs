@@ -289,9 +289,11 @@ pub struct ThemeConfig {
     #[serde(default)]
     pub center_group: bool,
     /// Per-edge margins as fractions of the photo's short side, top/bottom/
-    /// left/right. A negative value means "unset": the edge follows
-    /// `border_ratio` (see `effective_margins`). Presets from before these
-    /// fields existed deserialize to all-unset.
+    /// left/right. A negative value means "unset" — the fallback is
+    /// all-or-nothing (see `effective_margins`): only while *every* edge is
+    /// unset do all four follow `border_ratio`; once any edge is set, the
+    /// remaining unset edges clamp to 0. Presets from before these fields
+    /// existed deserialize to all-unset.
     #[serde(default = "margin_unset")]
     pub margin_top: f64,
     #[serde(default = "margin_unset")]
@@ -354,9 +356,10 @@ impl std::hash::Hash for ThemeConfig {
 }
 
 impl ThemeConfig {
-    /// Per-edge margins to lay out with: any edge still at the sentinel
-    /// (or below zero) follows `border_ratio`; if all four are unset the
-    /// frame is uniform at `border_ratio`.
+    /// Per-edge margins to lay out with, all-or-nothing: if all four edges
+    /// are unset (at the sentinel or below zero) the frame is uniform at
+    /// `border_ratio`; otherwise each set edge is clamped to >= 0 and each
+    /// still-unset edge reads as 0.
     pub fn effective_margins(&self) -> [f64; 4] {
         if self.margin_top < 0.0
             && self.margin_bottom < 0.0

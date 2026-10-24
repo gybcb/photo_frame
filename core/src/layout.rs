@@ -48,8 +48,6 @@ pub struct FrameLayout {
     pub ops: Vec<DrawOp>,
 }
 
-/// Text anchor within its region box.
-///
 /// Everything the bar structures share, computed once per `layout()` call.
 struct BarCtx<'a> {
     /// Canvas y of the bar band's top edge.
