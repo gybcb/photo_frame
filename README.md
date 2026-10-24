@@ -1,127 +1,156 @@
 # Framely
 
-给照片加相机品牌边框的 macOS 桌面程序（Rust / eframe + egui）。
+[English](README.md) | [简体中文](README.zh-CN.md)
 
-自动读取 EXIF，识别相机品牌并显示对应矢量 logo，填充镜头 / 焦距 / 光圈 /
-快门 / ISO；缺失的字段可在界面手动补录。同一张图可单张实时预览，也可批量
-导出。
+![CI](https://github.com/gybcb/photo_frame/actions/workflows/ci.yml/badge.svg)
 
-## 构建与运行
+A desktop app that frames photos with their camera brand — Rust, eframe +
+egui. Reads EXIF, detects the brand, draws its vector logo and fills in
+lens / focal length / aperture / shutter / ISO; missing fields can be
+typed in by hand. Live preview for one photo, parallel export for many.
+
+## Build and run
 
 ```sh
-cargo run --release -p framely-app  # 运行 GUI（日常用这个）
-cargo test --workspace            # 全部测试（core 逻辑 + batch 导出）
+cargo run --release -p framely-app  # run the GUI (this is the daily command)
+cargo test --workspace              # all tests (core logic + batch export)
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --check
 ```
 
-工具链：Rust 1.98+（edition 2024）。代码跨 macOS / Windows / Linux 三平台
-（GUI、对话框、字体探测、配置路径均按平台适配，平台逻辑有单测）；实测
-验证目前只在 macOS 做过，Windows / Linux 需自行跑一次确认。无打包产物。
+Toolchain: Rust 1.98+ (edition 2024). The code targets macOS, Windows and
+Linux — GUI, file dialogs, font probing and config paths are all
+platform-aware and unit-tested per platform; CI builds and tests on all
+three. Interactive use has only been verified on macOS so far. No
+packaging artifacts (dmg/msi/AppImage) yet.
 
-> 务必用 `--release` 运行。合成管线是逐像素 CPU 工作，debug 构建比
-> release 慢一个数量级（3000px 单帧约 145ms vs 1.4ms），预览会明显
-> 卡顿；debug 仅供开发调试。
+> Always run with `--release`. The compositor is per-pixel CPU work and
+> debug builds are an order of magnitude slower (~145 ms vs ~1.4 ms per
+> 3000 px frame); previews will stutter otherwise. Debug is for
+> development only.
 
-## 用法概览
+## Usage
 
-- **选图**：拖拽进窗口，或工具栏按钮（`rfd` 文件对话框），支持多选进批量列表。
-- **左侧主题面板**：4 个模板（White Studio / Black Bar / Minimal / Magazine），
-  边宽、参数条高、字号、前/背景色、字段开关与顺序、logo 单色/官方彩色均可调。
-  可调项可保存/载入为 JSON 预设（对话框默认目录为主目录）。
-- **右侧字段面板**：每字段显示 EXIF 值，勾选"手动"后改为自定义文本；
-  另有一条"整行自定义文本"（应对 Alpa 等机身不写镜头名的情况）。
-  手动值只影响渲染，不改写导出文件的 EXIF。
-- **底部批量导出**：选目录 → 并行逐张跑同一条渲染管线 → 进度条 + 逐张错误列表。
-  单张失败（如损坏文件）只记录原因，不中断批次。
-- **输出命名**：`<原名>_framed.jpg`，重名自动加 `_2`、`_3`……
+- **Open photos** — drag into the window, or use the toolbar button
+  (`rfd` dialog); multiple selection feeds the batch list.
+- **Theme panel (left)** — 4 templates (White Studio / Black Bar /
+  Minimal / Magazine). Border width, strip height, font size,
+  foreground/background colors, field toggles and order, mono vs.
+  official-color logo — all adjustable, and save/load-able as a JSON
+  preset (dialogs default to your home folder).
+- **Fields panel (right)** — each field shows its EXIF value; tick
+  *manual* to replace it with custom text. A whole-line custom text
+  field covers bodies like Alpa that write no lens name. Manual values
+  affect rendering only; exported EXIF is untouched.
+- **Batch export (bottom)** — pick a folder → the same pipeline runs
+  over every file in parallel → progress bar plus a per-file error
+  list. One broken file is recorded, never fatal to the batch.
+- **Output naming** — `<original>_framed.jpg`, with `_2`, `_3`… suffixes
+  on collision.
 
-预览与导出走同一条 `render::compose` 管线，只是画布缩放不同——这是
-"所见即所得"的保证。
+Preview and export share one `render::compose` pipeline and differ only
+in canvas scale — that is what makes WYSIWYG real here.
 
-## 支持的品牌
+## Supported brands
 
-EXIF `Make` 前缀匹配：Sony、Nikon、Canon、Leica、Hasselblad、Phase One、
-Alpa。识别不出（`Unknown`）不是错误：走无 logo 通用样式，只显示参数文字。
+EXIF `Make` prefix match: Sony, Nikon, Canon, Leica, Hasselblad,
+Phase One, Alpa. An unmatched `Unknown` is not an error: the photo gets
+the frame without a logo, text only.
 
-Logo 为矢量 SVG，在目标像素尺寸直接栅格化（不是放大位图），因此任意尺寸
-输出同样锐利。每个品牌两份变体：`.color.svg`（官方原色）与 `.mono.svg`
-（渲染时注入主题前景色）。
+Logos are vector SVGs rasterized at the exact target pixel size (not
+upscaled bitmaps), so they stay sharp at any export size. Each brand
+ships two variants: `.color.svg` (official colors) and `.mono.svg`
+(the theme's foreground color is injected at render time).
 
-> Black Bar 深色底若把 logo 切到"官方彩色"，多数品牌为黑色字标，会看不清——
-> 该主题默认单色（白），属预期行为。
+> On the dark Black Bar theme, "official color" makes most wordmarks
+> near-invisible (they are black type). The theme defaults to mono
+> (white) on purpose.
 
-## 大图（拼接全景）
+## Huge images (stitched panoramas)
 
-多张拼接的全景图可达数百兆像素。常驻内存的预览照片固定降到长边 2048
-以内再渲染（边框按比例、logo 矢量、文字运行时栅格化，小尺寸画布与全
-尺寸视觉一致且文字更锐利）；导出时按需以原始分辨率重新解码，并在编码
-前释放照片缓冲。批量导出限制 2 并发。约 286MP 的飞思两图拼接实测：
-打开+预览峰值 ~2.3GB，导出瞬时峰值 ~3.8GB（此前直接报
-"Memory limit exceeded" 或顶到 5.4GB）。
+Multi-frame stitches can reach hundreds of megapixels. The resident
+preview photo is downscaled to ≤ 2048 px on the long edge before
+rendering (borders are proportional, the logo is vector, text is
+rasterized at target size — a small canvas looks identical and text is
+actually sharper); export re-decodes at full resolution on demand and
+frees the photo buffer before encoding. Batch export runs 2 files at a
+time. Measured on a ~286 MP two-frame Phase One stitch: ~2.3 GB peak to
+open and preview, ~3.8 GB transient during export (previously: an outright
+"Memory limit exceeded", or 5.4 GB).
 
-## EXIF 策略（重要）
+## EXIF policy (important)
 
-导出 JPEG 时，原文件的 Exif APP1 段**原样搬移**（一个字节不重写），插在
-新编码 JPEG 的 SOI 之后。不重写的理由：各 Rust EXIF 写入库公认的重写路径
-会破坏 MakerNote 内部绝对偏移（kamadak-exif 作者亦明确说明该风险）。
+Exported JPEGs carry the original file's Exif APP1 segment **byte for
+byte**, spliced in right after SOI — nothing is re-written. Rationale:
+every Rust EXIF *writer* has a known failure mode of breaking absolute
+offsets inside MakerNotes (the kamadak-exif author documents this risk
+himself). Two deliberate exceptions/costs:
 
-两个有意的例外/代价：
+1. **Orientation is rewritten to 1** — pixels are already rotated during
+   decode, so keeping e.g. `6` would make viewers rotate the output
+   again. Only the inline SHORT value of tag `0x0112` changes — those
+   2 bytes; MakerNotes, all offsets and every other tag are untouched.
+   Files with no orientation tag, or with `1`, come out byte-identical.
+2. **PixelXDimension / PixelYDimension still report the unframed size**
+   and now disagree with the larger canvas. Mainstream viewers don't
+   care; `exiftool -validate` may warn.
 
-1. **Orientation 例外**：解码时像素已按 orientation 转正，若原样携带
-   （如 6），查看器会把成品再转一次。因此搬移前把 0x0112 标签的内联
-   SHORT 值改写为 1——**仅此 2 字节**，MakerNote、所有偏移、其余标签
-   不动；原本就没有或本来就是 1 的文件逐字节不变。
-2. **PixelXDimension / PixelYDimension 仍为原图尺寸**，与加框后的更大画布
-   不符。主流查看器不受影响，`exiftool -validate` 可能提示。
+Inputs without EXIF export as plain JPEGs — not an error.
 
-无 EXIF 的输入正常导出纯 JPEG，不报错。
+Logo sources and licensing (Wikimedia Commons, PD-textlogo + a
+Trademarked notice; the purification steps) are documented in
+`assets/brand/LICENSES.md`. The Inter font (OFL) is embedded in the
+binary — outputs never depend on system fonts.
 
-Logo 资产来源与许可（Wikimedia Commons，PD-textlogo + Trademarked 提示；
-净化步骤）见 `assets/brand/LICENSES.md`。字体 Inter（OFL）已内置进二进制，
-输出不依赖系统字体。
+## Language
 
-## 语言
+- UI in English / Chinese, toggled from a toolbar button. The choice is
+  persisted per platform: macOS `~/.framely/config.json` (historical
+  location, kept so upgrades don't lose it), Linux
+  `$XDG_CONFIG_HOME/framely/config.json` (falls back to
+  `~/.config/framely/`), Windows `%APPDATA%\framely\config.json`.
+- First launch follows the system `LANG` (`zh*` → Chinese). Windows has
+  no `LANG`; it starts in English, toggle freely.
+- No CJK font is embedded. A system Chinese font is probed at runtime —
+  macOS: PingFang / Hiragino Sans GB / STHeiti; Windows: Microsoft YaHei
+  (`%WINDIR%\Fonts\msyh.ttc`) → SimHei → SimSun; Linux: Noto Sans CJK
+  (common Debian/Arch/Fedora locations) → WenQuanYi Micro Hei / Zen Hei.
+  If nothing is found the UI stays English-only and the toggle hides
+  itself.
+- The CJK face is appended last (Latin keeps the default fonts and
+  metrics) and scaled to 0.84: Han glyphs fill the em box while Latin
+  reaches only cap height, so equal sizes read unevenly — and Hiragino
+  class fonts carry `hhea.lineGap = 0.5em`, whose per-glyph vertical
+  centering in egui would push Chinese out of its row and clip it. The
+  scale fixes both.
+- Text *inside the frame* (template names, parameters, logo) is always
+  English, independent of UI language.
 
-- 界面支持英文 / 中文，顶栏按钮一键切换，选择持久化在配置文件中：
-  macOS `~/.framely/config.json`（历史位置，不变）、Linux
-  `$XDG_CONFIG_HOME/framely/config.json`（无则 `~/.config/framely/`）、
-  Windows `%APPDATA%\framely\config.json`。
-- 首次运行跟随系统 `LANG` 环境变量（`zh*` 前缀进中文）。Windows 没有
-  `LANG`，默认英文，切换按钮可改。
-- 中文字体不打包进二进制：运行时探测系统 CJK 字体，探不到时界面保持
-  纯英文、切换按钮不出现。搜索顺序：macOS PingFang / 冬青黑体 / 华文黑体；
-  Windows `msyh.ttc`（微软雅黑，`%WINDIR%\Fonts`）→ `simhei.ttf` →
-  `simsun.ttc`；Linux Noto Sans CJK（Debian/Ubuntu、Arch、Fedora 常见
-  目录）→ 文泉驿微米黑 / 正黑。
-- CJK 字体追加在字体族末尾并缩放至 0.84：汉字填满 em 方框而拉丁只到
-  cap height，同字号下汉字会显大；冬青一类字体 `hhea.lineGap = 0.5em`
-  的行距还会让 egui 的逐字垂直居中把汉字顶出行框被裁。缩放同时解决
-  显大与裁字（拉丁仍用默认字体、默认度量）。
-- 边框内的文字（模板名、参数、Logo）恒为英文，与界面语言无关。
-
-## 项目结构
+## Project layout
 
 ```
-core/   framely-core — 无 GUI 依赖的全部逻辑
-  exif.rs      EXIF 提取 → 展示字段
-  brand.rs     Make/Model → 品牌匹配
-  format.rs    快门/光圈/ISO/焦距/镜头名格式化（纯函数，全单测）
-  template.rs  模板与可调主题（serde，预设即 JSON）
-  layout.rs    比例化布局 → Vec<DrawOp>
-  render.rs    SVG 栅格化 + 字形 + 合成（预览/导出共用）
-  jpeg.rs      解码（含 orientation 转正）/ 带原 APP1 的导出
-  assets.rs    内置 logo 与字体
-app/    framely-app — eframe GUI 壳（面板、预览、批量）
+core/   framely-core — all logic, zero GUI deps
+  exif.rs      EXIF extraction → display fields
+  brand.rs     Make/Model → brand matching
+  format.rs    shutter/aperture/ISO/focal/lens-name formatting
+               (pure functions, fully unit-tested)
+  template.rs  templates + tunable theme (serde; presets are JSON)
+  layout.rs    proportional layout → Vec<DrawOp>
+  render.rs    SVG rasterization + glyphs + compositing
+               (shared by preview and export)
+  jpeg.rs      decode (orientation-corrected) / export with original APP1
+  assets.rs    embedded logos and fonts
+app/    framely-app — the eframe shell (panels, preview, batch)
 ```
 
-## 范围外（v1）
+## Out of scope (v1)
 
-RAW 解码、输出 PNG/TIFF、外部模板描述文件格式、Windows/Linux 打包验证、
-图片编辑类附加功能（裁剪/调色）。
+RAW decoding, PNG/TIFF output, external template description files,
+installers/packaging, any image editing (crop, color adjustments).
 
-## 开发工具
+## Development tools
 
-`cargo run -p framely-app --example e2e` 用真实管线把测试图片导出到
-`/tmp/framely-e2e/`，供目测与 EXIF 比对（需自装 `exiftool`，或用
-Python Pillow；临时调试驱动，非产品功能）。
+`cargo run -p framely-app --example e2e` exports test images through the
+real pipeline into `/tmp/framely-e2e/` for eyeballing and EXIF diffs
+(needs `exiftool`, or Python Pillow; a throwaway debug driver, not a
+product feature).
