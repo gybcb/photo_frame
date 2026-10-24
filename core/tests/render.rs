@@ -182,3 +182,47 @@ fn count_near(img: &RgbaImage, target: [u8; 3], tol: i32, region: (u32, u32, u32
     }
     n
 }
+
+#[test]
+fn the_photo_is_blitted_pixel_exact_across_its_whole_rect() {
+    // Characterization guard for the paste step: a gradient photo means a
+    // wrong row offset, stride or off-by-one shows up as a mismatch rather
+    // than hiding inside a flat fill. Everything inside photo_rect must
+    // equal the source exactly; everything outside must equal the theme bg.
+    let (pw, ph) = (37u32, 23); // odd sizes: no accidental row alignment
+    let photo = RgbaImage::from_fn(pw, ph, |x, y| {
+        image::Rgba([(x * 7) as u8, (y * 11) as u8, ((x + y) * 5) as u8, 255])
+    });
+    let l = white_studio_dims(pw, ph);
+    let out = compose(&photo, &l, LogoMode::Mono).unwrap();
+    let (bx, by, _, _) = l.photo_rect;
+    for y in 0..l.canvas_height {
+        for x in 0..l.canvas_width {
+            let inside = (bx..bx + pw).contains(&x) && (by..by + ph).contains(&y);
+            let want = if inside {
+                *photo.get_pixel(x - bx, y - by)
+            } else {
+                image::Rgba(l.background)
+            };
+            // The bar's logo/text can overwrite pixels below the photo;
+            // only compare regions the paste step owns.
+            if y >= by + ph {
+                continue;
+            }
+            assert_eq!(out.get_pixel(x, y), &want, "pixel ({x},{y})");
+        }
+    }
+}
+
+/// White Studio layout sized to an arbitrary photo (logo ratio 5).
+fn white_studio_dims(w: u32, h: u32) -> FrameLayout {
+    layout(
+        TemplateId::WhiteStudio,
+        w,
+        h,
+        Brand::Sony,
+        5.0,
+        &ThemeConfig::default_for(TemplateId::WhiteStudio),
+        &fields(),
+    )
+}

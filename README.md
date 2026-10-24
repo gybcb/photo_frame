@@ -9,13 +9,17 @@
 ## 构建与运行
 
 ```sh
-cargo run -p framely-app          # 运行 GUI
+cargo run --release -p framely-app  # 运行 GUI（日常用这个）
 cargo test --workspace            # 全部测试（core 逻辑 + batch 导出）
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --check
 ```
 
 工具链：Rust 1.98+（edition 2024）。代码本身跨平台，但只在 macOS 上验证。
+
+> 务必用 `--release` 运行。合成管线是逐像素 CPU 工作，debug 构建比
+> release 慢一个数量级（3000px 单帧约 145ms vs 1.4ms），预览会明显
+> 卡顿；debug 仅供开发调试。
 
 ## 用法概览
 

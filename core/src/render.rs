@@ -78,10 +78,13 @@ pub fn compose(
             ph
         )));
     }
-    for y in 0..ph {
-        for x in 0..pw {
-            canvas.put_pixel(px + x, py + y, *photo.get_pixel(x, y));
-        }
+    // Row-wise bulk copies: same result as a per-pixel put, an order of
+    // magnitude faster (pixels are contiguous 4-byte RGBA on both sides).
+    let (src, dst) = (photo.as_raw(), canvas.as_mut());
+    let row = pw as usize * 4;
+    for y in 0..ph as usize {
+        let d = (py as usize + y) * w as usize * 4 + px as usize * 4;
+        dst[d..d + row].copy_from_slice(&src[y * row..(y + 1) * row]);
     }
 
     let fg = text_color(layout);
