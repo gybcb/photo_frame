@@ -87,7 +87,7 @@ pub fn compose(
         dst[d..d + row].copy_from_slice(&src[y * row..(y + 1) * row]);
     }
 
-    let fg = text_color(layout);
+    let fg = layout.foreground;
 
     // 2. ops in order (logo then text, as emitted by the layout)
     for op in &layout.ops {
@@ -117,17 +117,6 @@ pub fn compose(
     }
 
     Ok(canvas)
-}
-
-fn text_color(layout: &FrameLayout) -> [u8; 4] {
-    layout
-        .ops
-        .iter()
-        .find_map(|o| match o {
-            DrawOp::Text { color, .. } => Some(*color),
-            _ => None,
-        })
-        .unwrap_or(layout.background)
 }
 
 /// Rasterize the brand logo to (width x height) and source-over it at (x, y).

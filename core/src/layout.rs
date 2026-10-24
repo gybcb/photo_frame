@@ -42,6 +42,9 @@ pub struct FrameLayout {
     /// (x, y, width, height) of the photo inside the frame.
     pub photo_rect: (u32, u32, u32, u32),
     pub background: [u8; 4],
+    /// Theme text/mono-logo color. Carried here so the mono logo can be
+    /// painted even when no text op exists to infer it from.
+    pub foreground: [u8; 4],
     pub ops: Vec<DrawOp>,
 }
 
@@ -208,6 +211,7 @@ pub fn layout(
         bar_height: bar,
         photo_rect: (border, border, photo_w, photo_h),
         background: theme.background,
+        foreground: theme.foreground,
         ops,
     }
 }

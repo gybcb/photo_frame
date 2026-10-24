@@ -80,6 +80,28 @@ fn text_paints_foreground_pixels_in_the_bar() {
 }
 
 #[test]
+fn mono_logo_still_paints_when_no_text_is_shown() {
+    // All fields hidden and no custom line: the bar holds only the logo.
+    // It must paint the theme foreground — deriving the color from the
+    // (absent) text op fell back to the background and hid the logo.
+    let l = layout(
+        TemplateId::WhiteStudio,
+        400,
+        300,
+        Brand::Sony,
+        5.0,
+        &ThemeConfig::default_for(TemplateId::WhiteStudio),
+        &Fields::default(),
+    );
+    let out = compose(&gray_photo(400, 300, 128), &l, LogoMode::Mono).unwrap();
+    let dark = count_near(&out, [26, 26, 26], 60, logo_box(&l));
+    assert!(
+        dark > 30,
+        "logo vanished without text: only {dark} foreground pixels"
+    );
+}
+
+#[test]
 fn color_logo_keeps_official_brand_colors() {
     let l = white_studio(Brand::Leica);
     let out = compose(&gray_photo(400, 300, 128), &l, LogoMode::Color).unwrap();
