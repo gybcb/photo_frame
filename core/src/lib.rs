@@ -3,6 +3,7 @@
 pub mod assets;
 pub mod brand;
 pub mod error;
+pub mod exif;
 pub mod format;
 pub mod jpeg;
 pub mod layout;

@@ -93,7 +93,7 @@ fn rotate_to_orientation(img: image::RgbaImage, orientation: u16) -> image::Rgba
 /// Locate the raw Exif APP1 payload (the bytes after `Exif\0\0`) in a JPEG
 /// by scanning marker segments from SOI. Returns None for non-JPEG or
 /// EXIF-less input.
-fn find_app1(bytes: &[u8]) -> Option<&[u8]> {
+pub fn find_app1(bytes: &[u8]) -> Option<&[u8]> {
     if bytes.len() < 4 || bytes[..2] != [0xFF, 0xD8] {
         return None;
     }

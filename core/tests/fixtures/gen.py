@@ -46,7 +46,7 @@ def main():
     e[0x9003] = "2026:10:24 12:00:00"   # DateTimeOriginal
     e[0xA434] = "FE 35mm F1.8"          # LensModel
     e[0x829D] = IFDRational(1.8)        # FNumber
-    e[0x8833] = IFDRational(1 / 250)    # ExposureTime
+    e[0x8824] = IFDRational(1 / 250)    # ExposureTime
     e[0x8827] = 100                     # ISOSpeedRatings
     e[0x920A] = IFDRational(35)         # FocalLength
     save("sony.jpg", Image.new("RGB", (120, 80), (200, 100, 50)), ex)
@@ -56,7 +56,7 @@ def main():
     e6[0x9003] = "2026:10:24 13:00:00"
     e6[0xA434] = "24.0-70.0 mm f/4.0"
     e6[0x829D] = IFDRational(4.0)
-    e6[0x8833] = IFDRational(1 / 125)
+    e6[0x8824] = IFDRational(1 / 125)
     e6[0x8827] = 64
     e6[0x920A] = IFDRational(50)
     ex6[0x0112] = 6                     # Orientation (primary IFD)
