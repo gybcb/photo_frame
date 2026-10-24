@@ -1,6 +1,6 @@
 //! Tests for the embedded brand-logo lookup and color substitution.
 
-use framely_core::assets::{LogoMode, logo_svg};
+use framely_core::assets::{LogoMode, logo_aspect, logo_svg};
 use framely_core::brand::Brand;
 
 const KNOWN: [Brand; 7] = [
@@ -120,4 +120,20 @@ fn color_logo_is_left_untouched() {
         text.contains("#ED1C24"),
         "leica red should remain in color variant"
     );
+}
+
+#[test]
+fn logo_aspect_matches_the_svg_box() {
+    // A wide wordmark must report width/height > 1; the value comes from
+    // the SVG viewBox, so it is stable per brand.
+    let a = logo_aspect(Brand::Sony, LogoMode::Mono);
+    assert!(a > 1.5 && a < 12.0, "sony wordmark aspect {a} implausible");
+    // Leica is the round badge: square, not a wordmark.
+    let l = logo_aspect(Brand::Leica, LogoMode::Mono);
+    assert!((l - 1.0).abs() < 0.01, "leica badge should be square, got {l}");
+}
+
+#[test]
+fn unknown_brand_logo_aspect_is_a_neutral_default() {
+    assert_eq!(logo_aspect(Brand::Unknown, LogoMode::Mono), 1.0);
 }

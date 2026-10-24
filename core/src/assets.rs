@@ -55,3 +55,36 @@ pub fn logo_svg(brand: Brand, mode: LogoMode, fg: [u8; 4], bg: [u8; 4]) -> Optio
 
 pub const FONT_REGULAR: &[u8] = include_bytes!("../../assets/fonts/Inter-Regular.ttf");
 pub const FONT_MEDIUM: &[u8] = include_bytes!("../../assets/fonts/Inter-Medium.ttf");
+
+/// The logo's natural width/height aspect for a brand, read from its SVG
+/// `viewBox`. `Brand::Unknown` (no logo) reports `1.0`.
+pub fn logo_aspect(brand: Brand, mode: LogoMode) -> f64 {
+    // Mono variants differ from color in fills only; the viewBox is the
+    // same. Substitution happens at return time, so pass neutral colors.
+    let Some(svg) = logo_svg(brand, mode, [0, 0, 0, 255], [255, 255, 255, 255]) else {
+        return 1.0;
+    };
+    viewBox_aspect(&svg).unwrap_or(1.0)
+}
+
+/// Parse `viewBox="minx miny w h"` out of raw SVG bytes.
+fn viewBox_aspect(svg: &[u8]) -> Option<f64> {
+    let text = String::from_utf8_lossy(svg);
+    let at = text.find("viewBox")?;
+    let rest = &text[at + "viewBox".len()..];
+    let quoted = rest.trim_start().strip_prefix('=')?.trim_start();
+    let inner = quoted
+        .strip_prefix('"')
+        .or_else(|| quoted.strip_prefix('\''))?;
+    let inner = inner.split(['"', '\'']).next()?;
+    let mut nums = inner.split_whitespace().filter_map(|t| t.parse::<f64>().ok());
+    nums.next()?; // min-x
+    nums.next()?; // min-y
+    let w = nums.next()?;
+    let h = nums.next()?;
+    if w > 0.0 && h > 0.0 {
+        Some(w / h)
+    } else {
+        None
+    }
+}
