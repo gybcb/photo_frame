@@ -42,11 +42,12 @@ pub fn export_one(src: &Path, out_dir: &Path, spec: &BatchSpec) -> Result<PathBu
     let info = PhotoInfo::from_bytes(&bytes);
     let (photo, _exif_carry) = jpeg::load_bytes(&bytes)?;
 
-    let mut fields = Fields {
+    // The batch uses each file's own EXIF values; the user can only replace
+    // the whole line with one shared custom text.
+    let fields = Fields {
         parts: info.fields.parts.clone(),
         custom_line: spec.custom_line.clone(),
     };
-    let _ = &mut fields; // fields may be overridden below; keep borrow alive
 
     let logo_ratio = framely_core::assets::logo_aspect(info.brand, spec.logo_mode);
     let l = layout(

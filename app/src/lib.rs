@@ -4,7 +4,7 @@
 //! the same pipeline export uses, so preview and output always agree.
 
 mod app;
-mod batch;
+pub mod batch;
 mod panels;
 
 pub use app::FramelyApp;
