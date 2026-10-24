@@ -60,6 +60,11 @@ fn the_font_probe_skips_missing_and_non_font_candidates() {
 
 #[test]
 fn the_font_probe_finds_a_real_system_font() {
+    // Only macOS is guaranteed a known CJK font; on other hosts this
+    // asserts nothing (a bare Linux box legitimately has none).
+    if Platform::current() != Platform::Macos {
+        return;
+    }
     // One real, CJK-capable system font must be detected on macOS.
     let found = find_cjk_font(&[
         "/System/Library/Fonts/PingFang.ttc",
