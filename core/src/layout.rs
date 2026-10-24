@@ -86,8 +86,30 @@ pub fn layout(
     let canvas_w = photo_w + 2 * border;
     let canvas_h = photo_h + 2 * border + bar;
     let bar_y = border + photo_h;
+    let region_x = border + inner_pad + logo_slot + gap;
 
     let mut ops = Vec::new();
+
+    // Optically-centered variant: measure the real rendered width so the
+    // group's left and right canvas margins match to the pixel; the fit
+    // decisions above stay on the cheap estimate.
+    let centered = theme.center_group;
+    let joined = joined_text(&fitted);
+    let text_w = if centered && !joined.is_empty() {
+        crate::render::measure_text(&joined, fitted.size_px)
+    } else {
+        0
+    };
+    let group_x = if centered {
+        // The gap only exists between two real pieces; one lone piece
+        // must not carry phantom space.
+        let both = has_logo && text_w > 0;
+        let group_w =
+            (if has_logo { logo_slot } else { 0 }) + (if both { gap } else { 0 }) + text_w;
+        canvas_w.saturating_sub(group_w) / 2
+    } else {
+        0
+    };
 
     match tpl {
         TemplateId::WhiteStudio | TemplateId::BlackBar | TemplateId::Minimal => {
@@ -95,21 +117,32 @@ pub fn layout(
                 let h = logo_h.max(1);
                 ops.push(DrawOp::Logo {
                     brand,
-                    x: border + inner_pad,
+                    x: if centered {
+                        group_x
+                    } else {
+                        border + inner_pad
+                    },
                     y: bar_y + (bar - h) / 2,
                     width: logo_slot,
                     height: h,
                 });
             }
-            let text = joined_text(&fitted);
-            if !text.is_empty() {
-                let region_x = border + inner_pad + logo_slot + gap;
+            if !joined.is_empty() {
                 ops.push(DrawOp::Text {
-                    content: text,
+                    content: joined,
                     size_px: fitted.size_px,
                     color: theme.foreground,
-                    align: Align::Right,
-                    rect: (region_x, bar_y, text_region_w, bar),
+                    align: if centered { Align::Left } else { Align::Right },
+                    rect: if centered {
+                        (
+                            group_x + if has_logo { logo_slot + gap } else { 0 },
+                            bar_y,
+                            text_w,
+                            bar,
+                        )
+                    } else {
+                        (region_x, bar_y, text_region_w, bar)
+                    },
                 });
             }
         }
@@ -119,7 +152,11 @@ pub fn layout(
             if has_logo {
                 ops.push(DrawOp::Logo {
                     brand,
-                    x: border + inner_pad,
+                    x: if centered {
+                        group_x
+                    } else {
+                        border + inner_pad
+                    },
                     y: bar_y + (bar - logo_h.max(1)) / 2,
                     width: logo_slot,
                     height: logo_h.max(1),
@@ -136,17 +173,20 @@ pub fn layout(
                 if content.is_empty() {
                     continue;
                 }
+                // Centered: each line right-aligns inside the measured
+                // text block (no single line is wider than the joined
+                // string), so the group's margins stay equal.
+                let (rx, rw) = if centered {
+                    (group_x + if has_logo { logo_slot + gap } else { 0 }, text_w)
+                } else {
+                    (region_x, text_region_w)
+                };
                 ops.push(DrawOp::Text {
                     content: content.clone(),
                     size_px: fitted.size_px.min((line_h as f64 * 0.8) as u32),
                     color: theme.foreground,
                     align: Align::Right,
-                    rect: (
-                        border + inner_pad + logo_slot + gap,
-                        bar_y + i as u32 * line_h,
-                        photo_w.saturating_sub(2 * inner_pad + logo_slot + gap),
-                        line_h,
-                    ),
+                    rect: (rx, bar_y + i as u32 * line_h, rw, line_h),
                 });
             }
         }

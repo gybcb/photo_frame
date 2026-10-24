@@ -189,6 +189,10 @@ pub fn theme_panel(
         LogoMode::Color,
         lang.select("Official colors", "官方配色"),
     );
+    ui.checkbox(
+        &mut cfg.center_group,
+        lang.select("Center logo + fields", "Logo 与参数整体居中"),
+    );
 
     ui.add_space(10.0);
     ui.heading(lang.select("Fields", "字段"));

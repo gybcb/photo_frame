@@ -61,8 +61,9 @@ The app is not code-signed or notarized, so how you launch it matters:
 - **Theme panel (left)** — 4 templates (White Studio / Black Bar /
   Minimal / Magazine). Border width, strip height, font size,
   foreground/background colors, field toggles and order, mono vs.
-  official-color logo — all adjustable, and save/load-able as a JSON
-  preset (dialogs default to your home folder).
+  official-color logo, and logo+fields centered as one group — all
+  adjustable, and save/load-able as a JSON preset (dialogs default to
+  your home folder).
 - **Fields panel (right)** — each field shows its EXIF value; tick
   *manual* to replace it with custom text. A whole-line custom text
   field covers bodies like Alpa that write no lens name. Manual values

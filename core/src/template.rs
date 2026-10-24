@@ -107,6 +107,11 @@ pub struct ThemeConfig {
     pub foreground: [u8; 4],
     /// Gaps between parts, relative to the text size.
     pub part_spacing: f64,
+    /// Center the logo + parameters as one group in the bar (default:
+    /// logo left, parameters right). `serde(default)` keeps old presets
+    /// loadable.
+    #[serde(default)]
+    pub center_group: bool,
 }
 
 impl std::hash::Hash for ThemeConfig {
@@ -125,6 +130,7 @@ impl std::hash::Hash for ThemeConfig {
         }
         self.background.hash(state);
         self.foreground.hash(state);
+        self.center_group.hash(state);
     }
 }
 
@@ -139,6 +145,7 @@ impl ThemeConfig {
             background: [255, 255, 255, 255],
             foreground: [26, 26, 26, 255],
             part_spacing: 0.8,
+            center_group: false,
         };
         match tpl {
             TemplateId::WhiteStudio => base,

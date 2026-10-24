@@ -245,6 +245,114 @@ fn custom_line_replaces_all_fields() {
     assert!(!shown.contains("ISO100"), "fields replaced by custom line");
 }
 
+fn centered_theme() -> ThemeConfig {
+    ThemeConfig {
+        center_group: true,
+        ..ThemeConfig::default_for(TemplateId::WhiteStudio)
+    }
+}
+
+#[test]
+fn centered_group_is_optically_centered_in_the_bar() {
+    // Logo + parameters as ONE unit: the distance from the canvas's left
+    // edge to the logo must match the distance from the text's real right
+    // edge to the canvas's right edge (±1px rounding).
+    let l = layout(
+        TemplateId::WhiteStudio,
+        2000,
+        1333,
+        Brand::Sony,
+        2.0,
+        &centered_theme(),
+        &all_fields(),
+    );
+    let logo_x = l
+        .ops
+        .iter()
+        .find_map(|o| match o {
+            DrawOp::Logo { x, .. } => Some(*x),
+            _ => None,
+        })
+        .expect("logo present");
+    let (text_x, text_w) = l
+        .ops
+        .iter()
+        .find_map(|o| match o {
+            DrawOp::Text {
+                content,
+                size_px,
+                rect,
+                ..
+            } => Some((
+                rect.0,
+                framely_core::render::measure_text(content, *size_px),
+            )),
+            _ => None,
+        })
+        .expect("text present");
+    let right = l.canvas_width - (text_x + text_w);
+    assert!(
+        (logo_x as i64 - right as i64).abs() <= 1,
+        "group not centered: left margin {logo_x}, right margin {right}"
+    );
+    // And clearly not the default left-anchored position.
+    let d = lay(
+        2000,
+        1333,
+        TemplateId::WhiteStudio,
+        &all_fields(),
+        Brand::Sony,
+    );
+    let default_x = d
+        .ops
+        .iter()
+        .find_map(|o| match o {
+            DrawOp::Logo { x, .. } => Some(*x),
+            _ => None,
+        })
+        .unwrap();
+    assert!(logo_x > default_x, "logo should move right of its slot");
+}
+
+#[test]
+fn centered_logo_alone_centers_when_no_text_shows() {
+    let l = layout(
+        TemplateId::WhiteStudio,
+        2000,
+        1333,
+        Brand::Sony,
+        2.0,
+        &centered_theme(),
+        &Fields::default(),
+    );
+    assert!(
+        !l.ops
+            .iter()
+            .any(|o| matches!(o, DrawOp::Text { content, .. } if !content.is_empty())),
+        "no text expected"
+    );
+    let (x, w) = l
+        .ops
+        .iter()
+        .find_map(|o| match o {
+            DrawOp::Logo { x, width, .. } => Some((*x, *width)),
+            _ => None,
+        })
+        .expect("logo present");
+    let expect = (l.canvas_width - w) / 2;
+    assert!(
+        (x as i64 - expect as i64).abs() <= 1,
+        "logo-only centering: x {x}, expected {expect}"
+    );
+}
+
+#[test]
+fn center_group_is_off_by_default() {
+    for tpl in TemplateId::ALL {
+        assert!(!ThemeConfig::default_for(tpl).center_group);
+    }
+}
+
 #[test]
 fn no_template_overflows_its_canvas() {
     for tpl in [
