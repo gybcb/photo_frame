@@ -119,6 +119,36 @@ fn unique_path_bumps_rather_than_overwrites() {
 }
 
 #[test]
+fn a_run_reports_every_file_and_survives_a_broken_one() {
+    // The GUI relies on one Done per input, in any order, so a single bad
+    // file must not abort the batch or lose the good ones.
+    let dir = scratch("run");
+    let bad = dir.join("broken.jpg");
+    fs::write(&bad, b"not a jpeg at all").unwrap();
+    let files = vec![fixture("sony.jpg"), fixture("plain.jpg"), bad.clone()];
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    framely_app::batch::run(files, dir.clone(), spec(), tx);
+
+    let done: Vec<_> = rx.iter().collect();
+    assert_eq!(done.len(), 3, "every input reports exactly once");
+    let ok = done.iter().filter(|d| d.ok).count();
+    let err = done.iter().filter(|d| !d.ok).count();
+    assert_eq!(
+        (ok, err),
+        (2, 1),
+        "both photos exported, the bad one failed"
+    );
+    assert!(
+        done.iter()
+            .any(|d| !d.ok && d.error.as_deref().is_some_and(|e| !e.is_empty())),
+        "a failure must carry a reason, not a bare flag"
+    );
+    assert!(dir.join("sony_framed.jpg").exists());
+    assert!(dir.join("plain_framed.jpg").exists());
+}
+
+#[test]
 fn a_batch_custom_line_changes_the_rendered_bar() {
     // Same source, same theme — the only difference is the shared custom
     // line. If it reaches the layout at all, the drawn parameters differ,
