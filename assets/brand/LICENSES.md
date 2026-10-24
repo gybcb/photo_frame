@@ -17,13 +17,16 @@ Brand-specific notes:
   bottom. The color variant keeps the official emblem intact; the mono
   variant extracts only the wordmark path and crops the viewBox to its
   painted bounds (a full-canvas solid fill would be unusable as a logo).
-- **leica.mono.svg** — the red disc and the white knockout wordmark are
-  merged into one even-odd path, so the letters stay knocked out when the
-  whole mark is drawn in the theme foreground color.
 - **phaseone.svg** — the "1" interlocked between "N" and "E" is part of the
   source vector and preserved.
 - **alpa** — a Commons source exists (`File:Alpa logo.svg`); no redrawing
-  was needed.
+  was needed. The source's `viewBox` clipped the artwork to roughly the
+  left 60% (an Inkscape leftover), so it was corrected to the true content
+  bounds (`-8 -8 961 293`), which reveals the full "ALPA® / OF SWITZERLAND"
+  lockup.
+- **leica.mono.svg** — a two-layer variant generated from the color source:
+  the disc takes `%FG%` and the wordmark takes `%BG%`, so on any theme the
+  logo reads as a solid disc with knocked-out letters.
 
 ## Sources and license
 
