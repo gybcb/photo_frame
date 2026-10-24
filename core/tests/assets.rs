@@ -130,10 +130,18 @@ fn logo_aspect_matches_the_svg_box() {
     assert!(a > 1.5 && a < 12.0, "sony wordmark aspect {a} implausible");
     // Leica is the round badge: square, not a wordmark.
     let l = logo_aspect(Brand::Leica, LogoMode::Mono);
-    assert!((l - 1.0).abs() < 0.01, "leica badge should be square, got {l}");
+    assert!(
+        (l - 1.0).abs() < 0.01,
+        "leica badge should be square, got {l}"
+    );
 }
 
 #[test]
 fn unknown_brand_logo_aspect_is_a_neutral_default() {
     assert_eq!(logo_aspect(Brand::Unknown, LogoMode::Mono), 1.0);
+}
+
+#[test]
+fn logo_mode_defaults_to_mono() {
+    assert_eq!(LogoMode::default(), LogoMode::Mono);
 }

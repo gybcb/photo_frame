@@ -3,9 +3,10 @@
 use crate::brand::Brand;
 
 /// How a logo is painted onto the frame.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum LogoMode {
     /// Single color, following the theme foreground color.
+    #[default]
     Mono,
     /// Original brand colors as downloaded.
     Color,
@@ -64,11 +65,11 @@ pub fn logo_aspect(brand: Brand, mode: LogoMode) -> f64 {
     let Some(svg) = logo_svg(brand, mode, [0, 0, 0, 255], [255, 255, 255, 255]) else {
         return 1.0;
     };
-    viewBox_aspect(&svg).unwrap_or(1.0)
+    view_box_aspect(&svg).unwrap_or(1.0)
 }
 
 /// Parse `viewBox="minx miny w h"` out of raw SVG bytes.
-fn viewBox_aspect(svg: &[u8]) -> Option<f64> {
+fn view_box_aspect(svg: &[u8]) -> Option<f64> {
     let text = String::from_utf8_lossy(svg);
     let at = text.find("viewBox")?;
     let rest = &text[at + "viewBox".len()..];
@@ -77,7 +78,9 @@ fn viewBox_aspect(svg: &[u8]) -> Option<f64> {
         .strip_prefix('"')
         .or_else(|| quoted.strip_prefix('\''))?;
     let inner = inner.split(['"', '\'']).next()?;
-    let mut nums = inner.split_whitespace().filter_map(|t| t.parse::<f64>().ok());
+    let mut nums = inner
+        .split_whitespace()
+        .filter_map(|t| t.parse::<f64>().ok());
     nums.next()?; // min-x
     nums.next()?; // min-y
     let w = nums.next()?;

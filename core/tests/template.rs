@@ -30,6 +30,21 @@ fn fields_roundtrip_through_json() {
 }
 
 #[test]
+fn field_labels_are_display_friendly() {
+    assert_eq!(Field::Iso.label(), "ISO");
+    assert_eq!(Field::Shutter.label(), "Shutter");
+    assert_eq!(Field::Aperture.label(), "Aperture");
+    assert_eq!(Field::Lens.label(), "Lens");
+    assert_eq!(Field::Focal.label(), "Focal");
+    assert_eq!(Field::Date.label(), "Date");
+}
+
+#[test]
+fn template_id_defaults_to_white_studio() {
+    assert_eq!(TemplateId::default(), TemplateId::WhiteStudio);
+}
+
+#[test]
 fn template_id_serializes_to_its_stable_id() {
     // Preset files must stay valid across refactors: serialize the stable
     // kebab-case id, not the Rust variant name.

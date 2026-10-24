@@ -4,10 +4,11 @@ use serde::{Deserialize, Serialize};
 
 /// The built-in frame templates.
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TemplateId {
     /// White border all around; bottom bar with logo left, parameters right.
+    #[default]
     WhiteStudio,
     /// Dark border and dark bar with light text; suited to night shots.
     BlackBar,
@@ -66,6 +67,18 @@ impl Field {
             Field::Date => "date",
         }
     }
+
+    /// Human-readable name for UI labels.
+    pub fn label(self) -> &'static str {
+        match self {
+            Field::Lens => "Lens",
+            Field::Focal => "Focal",
+            Field::Aperture => "Aperture",
+            Field::Shutter => "Shutter",
+            Field::Iso => "ISO",
+            Field::Date => "Date",
+        }
+    }
 }
 
 /// The field values to render, already formatted for display.
@@ -78,7 +91,7 @@ pub struct Fields {
 }
 
 /// User-adjustable look of a template. Colors are RGBA 0..=255.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ThemeConfig {
     /// Outer border width as a fraction of the photo's short side.
     pub border_ratio: f64,
@@ -94,6 +107,25 @@ pub struct ThemeConfig {
     pub foreground: [u8; 4],
     /// Gaps between parts, relative to the text size.
     pub part_spacing: f64,
+}
+
+impl std::hash::Hash for ThemeConfig {
+    /// Bit-wise, so it can live in the app's dirty-check hash. Sliders
+    /// quantise to discrete steps during interaction, so the preview
+    /// re-renders on every visible change.
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        for v in [
+            self.border_ratio,
+            self.bar_ratio,
+            self.font_scale,
+            self.logo_scale,
+            self.part_spacing,
+        ] {
+            state.write(&v.to_bits().to_le_bytes());
+        }
+        self.background.hash(state);
+        self.foreground.hash(state);
+    }
 }
 
 impl ThemeConfig {

@@ -1,0 +1,269 @@
+//! Side panels: theme controls (left) and field overrides (right).
+//!
+//! Panels only read and mutate state; all rendering decisions live in
+//! `framely-core`.
+
+use egui::{Color32, RichText, Ui, vec2};
+use framely_core::assets::LogoMode;
+use framely_core::template::{Field, Fields, TemplateId, ThemeConfig};
+use std::hash::{Hash, Hasher};
+
+/// Which field the user chose to edit by hand (None = use the EXIF text).
+#[derive(Clone, Debug, Default)]
+pub struct FieldOverrides {
+    /// `field -> manual text`; present means "edit by hand".
+    pub manual: Vec<(Field, String)>,
+    /// Free line that replaces the whole parameter line when non-empty.
+    pub custom_line: String,
+    pub use_custom_line: bool,
+}
+
+impl PartialEq for FieldOverrides {
+    fn eq(&self, other: &Self) -> bool {
+        // Two empty drafts are the same state; only typed text counts.
+        effective_custom_line(self) == effective_custom_line(other)
+            && self
+                .manual
+                .iter()
+                .filter(|(_, t)| !t.is_empty())
+                .eq(other.manual.iter().filter(|(_, t)| !t.is_empty()))
+    }
+}
+
+impl Hash for FieldOverrides {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        if self.use_custom_line {
+            self.custom_line.hash(state);
+        }
+        for (f, t) in &self.manual {
+            if !t.is_empty() {
+                f.hash(state);
+                t.hash(state);
+            }
+        }
+    }
+}
+
+/// The custom line as it affects rendering: empty unless the toggle is on.
+fn effective_custom_line(o: &FieldOverrides) -> &str {
+    if o.use_custom_line {
+        &o.custom_line
+    } else {
+        ""
+    }
+}
+
+impl FieldOverrides {
+    /// Merge the EXIF-derived fields with the user's manual values.
+    /// Manual wins per field; the custom line wins over everything.
+    /// Empty manual texts and a unticked custom line don't count as changes.
+    pub fn apply(&self, exif: &Fields) -> Fields {
+        let mut parts = exif.parts.clone();
+        for (f, text) in &self.manual {
+            if text.is_empty() {
+                continue; // a blank draft is not a value — keep the EXIF one
+            }
+            if let Some(slot) = parts.iter_mut().find(|(k, _)| k == f) {
+                slot.1 = text.clone();
+            } else {
+                parts.push((*f, text.clone()));
+            }
+        }
+        let custom = if self.use_custom_line && !self.custom_line.is_empty() {
+            Some(self.custom_line.clone())
+        } else {
+            None
+        };
+        Fields {
+            parts,
+            custom_line: custom,
+        }
+    }
+}
+
+/// Pick the theme for `template`, seeding defaults if absent.
+pub fn theme_for(
+    themes: &mut Vec<(TemplateId, ThemeConfig)>,
+    template: TemplateId,
+) -> &mut ThemeConfig {
+    if let Some(i) = themes.iter().position(|(t, _)| *t == template) {
+        &mut themes[i].1
+    } else {
+        themes.push((template, ThemeConfig::default_for(template)));
+        &mut themes.last_mut().unwrap().1
+    }
+}
+
+/// Left panel: templates, geometry, colors, logo mode, field toggles.
+pub fn theme_panel(
+    ui: &mut Ui,
+    template: &mut TemplateId,
+    themes: &mut Vec<(TemplateId, ThemeConfig)>,
+    logo_mode: &mut LogoMode,
+    enabled: &mut Vec<Field>,
+) {
+    ui.heading("Template");
+    ui.separator();
+    for &t in TemplateId::ALL.iter() {
+        ui.radio_value(template, t, t.display_name());
+    }
+
+    let cfg = theme_for(themes, *template);
+    ui.add_space(10.0);
+    ui.heading("Layout");
+    ui.separator();
+    slider(ui, "Border", &mut cfg.border_ratio, 0.005..=0.15);
+    slider(ui, "Bar height", &mut cfg.bar_ratio, 0.02..=0.20);
+    slider(ui, "Font size", &mut cfg.font_scale, 0.2..=0.9);
+    slider(ui, "Logo size", &mut cfg.logo_scale, 0.0..=1.0);
+    slider(ui, "Field spacing", &mut cfg.part_spacing, 0.2..=1.5);
+
+    ui.add_space(10.0);
+    ui.heading("Colors");
+    ui.separator();
+    let mut bg = Color32::from_rgba_unmultiplied(
+        cfg.background[0],
+        cfg.background[1],
+        cfg.background[2],
+        cfg.background[3],
+    );
+    if ui
+        .color_edit_button_srgba(&mut bg)
+        .on_hover_text("frame background")
+        .changed()
+    {
+        cfg.background = bg.to_array();
+    }
+    let mut fg = Color32::from_rgba_unmultiplied(
+        cfg.foreground[0],
+        cfg.foreground[1],
+        cfg.foreground[2],
+        cfg.foreground[3],
+    );
+    if ui
+        .color_edit_button_srgba(&mut fg)
+        .on_hover_text("text / mono logo")
+        .changed()
+    {
+        cfg.foreground = fg.to_array();
+    }
+
+    ui.add_space(10.0);
+    ui.heading("Logo");
+    ui.separator();
+    ui.radio_value(logo_mode, LogoMode::Mono, "Monochrome (theme color)");
+    ui.radio_value(logo_mode, LogoMode::Color, "Official colors");
+
+    ui.add_space(10.0);
+    ui.heading("Fields");
+    ui.separator();
+    ui.label(RichText::new("shown, in order:").weak().small());
+    for f in [
+        Field::Lens,
+        Field::Focal,
+        Field::Aperture,
+        Field::Shutter,
+        Field::Iso,
+        Field::Date,
+    ] {
+        let mut on = enabled.contains(&f);
+        if ui.checkbox(&mut on, f.label()).changed() {
+            if on {
+                enabled.retain(|x| *x != f);
+                enabled.push(f); // append → display order follows toggles
+            } else {
+                enabled.retain(|x| *x != f);
+            }
+        }
+    }
+}
+
+fn slider(ui: &mut Ui, label: &str, v: &mut f64, range: std::ops::RangeInclusive<f64>) {
+    ui.add(egui::Slider::new(v, range).text(label));
+}
+
+/// Right panel: EXIF values with manual overrides.
+pub fn fields_panel(
+    ui: &mut Ui,
+    info: &framely_core::exif::PhotoInfo,
+    overrides: &mut FieldOverrides,
+) {
+    ui.heading("Shooting data");
+    ui.separator();
+    ui.label(format!("Make: {}", dash_if_empty(&info.make)));
+    ui.label(format!("Model: {}", dash_if_empty(&info.model)));
+
+    ui.add_space(8.0);
+    for f in [
+        Field::Lens,
+        Field::Focal,
+        Field::Aperture,
+        Field::Shutter,
+        Field::Iso,
+        Field::Date,
+    ] {
+        let exif_text = info
+            .fields
+            .parts
+            .iter()
+            .find(|(k, _)| *k == f)
+            .map(|(_, v)| v.as_str())
+            .unwrap_or("");
+        let manual = overrides
+            .manual
+            .iter()
+            .find(|(k, _)| *k == f)
+            .map(|(_, v)| v.clone());
+        let editing = manual.is_some();
+
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(f.label()).strong().small());
+            let mut txt = manual.clone().unwrap_or_default();
+            let resp = ui.add_sized(
+                vec2(140.0, 0.0),
+                egui::TextEdit::singleline(&mut txt).hint_text(if exif_text.is_empty() {
+                    "(no EXIF)"
+                } else {
+                    exif_text
+                }),
+            );
+            if resp.changed() {
+                set_manual(overrides, f, txt);
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let mut on = editing;
+                if ui
+                    .checkbox(&mut on, "edit")
+                    .on_hover_text("tick to type a manual value")
+                    .changed()
+                {
+                    if on {
+                        set_manual(overrides, f, exif_text.to_string());
+                    } else {
+                        overrides.manual.retain(|(k, _)| *k != f);
+                    }
+                }
+            });
+        });
+    }
+
+    ui.add_space(10.0);
+    ui.weak("custom line (replaces all fields):");
+    ui.checkbox(&mut overrides.use_custom_line, "use custom line");
+    ui.add_sized(
+        vec2(ui.available_width(), 0.0),
+        egui::TextEdit::singleline(&mut overrides.custom_line)
+            .hint_text("e.g. ALPA 12 · 90mm · f/8 · 1/125"),
+    );
+}
+
+fn dash_if_empty(s: &str) -> &str {
+    if s.is_empty() { "—" } else { s }
+}
+
+fn set_manual(o: &mut FieldOverrides, f: Field, text: String) {
+    match o.manual.iter_mut().find(|(k, _)| *k == f) {
+        Some(slot) => slot.1 = text,
+        None => o.manual.push((f, text)),
+    }
+}
