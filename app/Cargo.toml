@@ -1,0 +1,15 @@
+[package]
+name = "framely-app"
+version = "0.1.0"
+edition = "2024"
+description = "Framely: add camera-brand frames to photos"
+
+[dependencies]
+eframe = "0.37"
+egui = "0.37"
+rfd = "0.17"
+rayon = "1.12"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+framely-core = { path = "../core" }

@@ -1,7 +1,11 @@
 //! Theme definitions: the template identity and its user-adjustable knobs.
 
+use serde::{Deserialize, Serialize};
+
 /// The built-in frame templates.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum TemplateId {
     /// White border all around; bottom bar with logo left, parameters right.
     WhiteStudio,
@@ -41,7 +45,7 @@ impl TemplateId {
 }
 
 /// One parameter slot a frame can show, in default display order.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Field {
     Lens,
     Focal,
@@ -65,7 +69,7 @@ impl Field {
 }
 
 /// The field values to render, already formatted for display.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Fields {
     /// `(field, formatted value)` pairs, in display order, missing ones absent.
     pub parts: Vec<(Field, String)>,
@@ -74,7 +78,7 @@ pub struct Fields {
 }
 
 /// User-adjustable look of a template. Colors are RGBA 0..=255.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ThemeConfig {
     /// Outer border width as a fraction of the photo's short side.
     pub border_ratio: f64,
