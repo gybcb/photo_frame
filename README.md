@@ -29,6 +29,27 @@ packaging artifacts (dmg/msi/AppImage) yet.
 > 3000 px frame); previews will stutter otherwise. Debug is for
 > development only.
 
+### Running on macOS (unsigned)
+
+The app is not code-signed or notarized, so how you launch it matters:
+
+- **Built yourself (recommended):** `cargo run --release` — or the
+  binary at `target/release/framely-app` — is not quarantined and
+  launches with no prompts, straight from the terminal.
+- **Downloaded from a browser / chat app:** macOS attaches the
+  quarantine attribute and Gatekeeper blocks the first launch ("cannot
+  be opened" / "damaged"). Clear it once:
+
+  ```sh
+  xattr -d com.apple.quarantine /path/to/framely-app
+  ```
+
+  or right-click the file → **Open** → **Open** in the confirmation
+  dialog (System Settings → Privacy & Security also offers an
+  "Open Anyway" button after a blocked attempt).
+- `curl`/`wget` downloads are not quarantined — only browser-style
+  downloads are.
+
 ## Usage
 
 - **Open photos** — drag into the window, or use the toolbar button
