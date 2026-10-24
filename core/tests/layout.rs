@@ -441,6 +441,44 @@ fn logo_y_offset_defaults_to_centered() {
 }
 
 #[test]
+fn bar_separator_bar_uses_pipe_and_keeps_text() {
+    let mut theme = ThemeConfig::default_for(TemplateId::WhiteStudio);
+    theme.separator = framely_core::template::Separator::Bar;
+    let l = layout(
+        TemplateId::WhiteStudio,
+        2000,
+        1333,
+        Brand::Sony,
+        2.0,
+        &theme,
+        &all_fields(),
+    );
+    let joined = texts(&l).join(" ");
+    assert!(joined.contains('|'), "pipe separator missing: {joined}");
+    assert!(
+        joined.contains("f/1.8") && joined.contains("ISO100"),
+        "fields swallowed: {joined}"
+    );
+}
+
+#[test]
+fn top_bar_sits_above_the_photo() {
+    let l = lay(2000, 1333, TemplateId::TopBar, &all_fields(), Brand::Sony);
+    // TopBar: photo y = mt + bar  >  mt (a bottom-bar photo starts at mt).
+    let (px, py, _, _) = l.photo_rect;
+    assert!(py > px, "top bar pushes the photo down: py {py} vs mt {px}");
+    let bar_bottom = l
+        .ops
+        .iter()
+        .find_map(|o| match o {
+            DrawOp::Text { rect, .. } => Some(rect.1 + rect.3),
+            _ => None,
+        })
+        .expect("text op");
+    assert!(bar_bottom <= py, "bar rect must stay above the photo");
+}
+
+#[test]
 fn no_template_overflows_its_canvas() {
     for tpl in [
         TemplateId::WhiteStudio,
