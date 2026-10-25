@@ -286,6 +286,10 @@ impl FramelyApp {
                 Ok((tex, (w, h)))
             })();
             let _ = tx.send(result);
+            // The event loop sleeps when idle; without this nudge the
+            // finished render only surfaces on the next user input (the
+            // texture is uploaded but the stale frame keeps showing).
+            ctx.request_repaint();
         });
     }
 
